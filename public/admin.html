@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FerBot · Dashboard</title>
+<style>
+body{background:#0b0f19;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;margin:0}
+.wrap{max-width:1100px;margin:20px auto;padding:0 12px}
+h1{font-size:18px;margin:0 0 12px}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;font-size:14px;text-align:left}
+.btn{padding:8px 10px;border-radius:10px;border:0;cursor:pointer;font-weight:700;margin-right:6px}
+.primary{background:#97C93E;color:#0b0f19}
+.ghost{background:#1b2333;color:#d1e2ff}
+.stat{display:inline-block;background:#101727;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 10px;margin-right:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>FerBot · Dashboard</h1>
+  <div style="margin-bottom:10px">
+    <button id="reload" class="btn primary">Recargar Trainer</button>
+    <button id="panel" class="btn ghost">Abrir Panel</button>
+  </div>
+  <div id="stats" style="margin-bottom:10px"></div>
+  <table id="tbl">
+    <thead><tr><th>Intent</th><th>Stage</th><th>Texto</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<script>
+const BASE = location.origin;
+document.getElementById('panel').onclick=()=>open('/panel','_blank');
+
+document.getElementById('reload').onclick=async ()=>{
+  const r = await fetch(BASE+'/admin/reloadTrainer'); const j=await r.json();
+  alert('Trainer recargado.\nidentity_len='+j.identity_len+'\nknowledge_len='+j.knowledge_len);
+};
+
+async function load(){
+  const health = await (await fetch(BASE+'/health')).json();
+  document.getElementById('stats').innerHTML =
+    '<span class="stat">Modelo: '+health.model_env+'</span>'+
+    '<span class="stat">OpenAI: '+(health.openai?'OK':'OFF')+'</span>'+
+    '<span class="stat">Hora: '+(new Date(health.time)).toLocaleString()+'</span>';
+
+  // mostramos lo que el API registró como "shown"
+  const resp = await fetch(BASE+'/data/shown.jsonl'); // servida por express.static
+  if(!resp.ok){ return; }
+  const text = await resp.text();
+  const lines = text.trim().split('\n').filter(Boolean).reverse().slice(0,50);
+  const tbody = document.querySelector('#tbl tbody'); tbody.innerHTML='';
+  lines.forEach(l=>{
+    try{
+      const j = JSON.parse(l);
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+j.intent+'</td><td>'+j.stage+'</td><td>'+j.text+'</td>';
+      tbody.appendChild(tr);
+    }catch{}
+  });
+}
+load();
+</script>
+</body>
+</html>

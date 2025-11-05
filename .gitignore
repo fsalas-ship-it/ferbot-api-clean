@@ -1,0 +1,7 @@
+node_modules/
+.env
+logs.jsonl
+shown.jsonl
+stats.json
+usage.ndjson
+.DS_Store

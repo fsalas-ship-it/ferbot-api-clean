@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FerBot · Panel</title>
+<style>
+:root{--green:#97C93E;--ink:#e2e8f0;--d:#0b0f19;--bg:#0b0f19E6;--mut:#94a3b8;}
+html,body{background:#0b0f19;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;margin:0}
+.wrap{max-width:920px;margin:24px auto;padding:0 12px}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:14px;margin:14px 0}
+h1{font-size:18px;margin:0 0 8px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 6px}
+input,select,textarea{width:100%;background:#0f1524;border:1px solid rgba(255,255,255,.12);color:#dbeafe;border-radius:10px;padding:9px;resize:vertical}
+textarea{min-height:90px}
+.row{display:flex;gap:10px;align-items:center}
+.row>div{flex:1}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:#101727}
+.badge .dot{width:8px;height:8px;border-radius:999px;background:#64748b}
+.badge.pos .dot{background:#22c55e}.badge.neu .dot{background:#f59e0b}.badge.neg .dot{background:#ef4444}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.btn{padding:9px 10px;border-radius:10px;border:0;cursor:pointer;font-weight:800}
+.primary{background:var(--green);color:#0b0f19}
+.ghost{background:#1b2333;color:#d1e2ff}
+.good{background:#19c37d;color:#062d1f;display:none}
+.reg{background:#fbbf24;color:#332200;display:none}
+.bad{background:#ef4444;color:#fff;display:none}
+.signal{display:inline-flex;align-items:center;gap:8px;background:#101727;border:1px solid rgba(255,255,255,.12);padding:5px 10px;border-radius:999px}
+.bullet{width:10px;height:10px;border-radius:999px;background:#ef4444}
+.bullet.amber{background:#f59e0b}.bullet.green{background:#22c55e}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>FerBot · Panel</h1>
+      <span class="signal"><span id="b" class="bullet"></span><span id="t">0.0s</span></span>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>Nombre del cliente</label>
+          <input id="name" placeholder="Ej. Laura">
+        </div>
+        <div>
+          <label>Etapa</label>
+          <select id="stage">
+            <option value="integracion">Integración</option>
+            <option value="sondeo">Sondeo</option>
+            <option value="rebatir" selected>Rebatir</option>
+            <option value="pre_cierre">Pre-cierre</option>
+            <option value="cierre">Cierre</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Contexto (opcional)</label>
+      <input id="ctx" placeholder="Notas breves para el bot...">
+
+      <div class="row" style="align-items:flex-end;margin-top:8px">
+        <div style="flex:1">
+          <label>Texto del cliente / Objeción</label>
+          <textarea id="in" placeholder="Selecciona texto del chat o escribe aquí..."></textarea>
+        </div>
+        <div class="badge neu" id="sent">
+          <span class="dot"></span><span id="sTxt">Neutral</span>
+        </div>
+      </div>
+
+      <label>Explicación (POR QUÉ + SIGUIENTE PASO)</label>
+      <textarea id="guide" placeholder="Aquí verás POR QUÉ y el SIGUIENTE PASO..."></textarea>
+
+      <label>Respuesta (lista para pegar)</label>
+      <textarea id="out" placeholder="Mensaje breve (≤ 2 frases)."></textarea>
+
+      <div class="btns">
+        <button id="gen" class="btn primary">Generar</button>
+        <button id="clr" class="btn ghost">Clear</button>
+        <button id="g" class="btn good">👍 Buena</button>
+        <button id="r" class="btn reg">😐 Regular</button>
+        <button id="b1" class="btn bad">👎 Mala</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const BASE = (localStorage.getItem('ferbot_api_base') || '') || (location.origin);
+const nameEl = document.getElementById('name');
+const stageEl= document.getElementById('stage');
+const ctxEl  = document.getElementById('ctx');
+const inEl   = document.getElementById('in');
+const outEl  = document.getElementById('out');
+const guideEl= document.getElementById('guide');
+const btnGen = document.getElementById('gen');
+const btnClr = document.getElementById('clr');
+const btnGood= document.getElementById('g');
+const btnReg = document.getElementById('r');
+const btnBad = document.getElementById('b1');
+const dot    = document.getElementById('b');
+const timer  = document.getElementById('t');
+const badge  = document.getElementById('sent');
+const bTxt   = document.getElementById('sTxt');
+
+let clock=null, t0=0, lastReply=null;
+
+function start() {
+  stop(); t0 = performance.now();
+  clock = setInterval(()=>{
+    const dt = (performance.now()-t0)/1000; timer.textContent = dt.toFixed(1)+'s';
+    dot.className='bullet'+(dt<2?'':' '+(dt<4?'amber':'green'));
+  }, 100);
+}
+function stop(){ if(clock) clearInterval(clock); clock=null; }
+function toggleRatings(show){ [btnGood,btnReg,btnBad].forEach(x=>x.style.display=show?'inline-block':'none'); }
+function sent(text){
+  const s=(text||'').toLowerCase();
+  let cls='neu', t='Neutral';
+  if (/(no puedo|caro|no sirve|difícil|no tengo tiempo)/i.test(s)) {cls='neg';t='Negativo'}
+  else if (/(gracias|perfecto|me interesa|genial|bien)/i.test(s)) {cls='pos';t='Positivo'}
+  badge.classList.remove('pos','neu','neg'); badge.classList.add(cls); bTxt.textContent=t;
+}
+inEl.addEventListener('input',()=>sent(inEl.value));
+document.addEventListener('mouseup',()=>setTimeout(()=>{
+  const sel = window.getSelection()?.toString()?.trim(); if(sel){ inEl.value=sel; sent(sel); }
+},30));
+
+btnGen.onclick = async ()=>{
+  const q=(inEl.value||'').trim(); if(!q){ alert('Escribe o selecciona un texto primero.'); return; }
+  guideEl.value=''; outEl.value=''; toggleRatings(false); start();
+  try{
+    const r = await fetch(BASE+'/assist_trainer',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ question:q, customerName:(nameEl.value||'Cliente'), stage:stageEl.value, context:ctxEl.value })
+    });
+    stop(); dot.className='bullet green';
+    if(!r.ok){ alert('No se pudo generar.'); return; }
+    const j = await r.json();
+    const reply = j?.result?.reply || j?.text || '';
+    const why   = j?.result?.why || '';
+    const next  = j?.result?.next || '';
+    outEl.value = reply;
+    guideEl.value = `POR QUÉ: ${why}\nSIGUIENTE PASO: ${next}`;
+    lastReply = reply; toggleRatings(true);
+  }catch(e){ stop(); alert('No se pudo generar. Revisa que el servidor esté arriba.'); }
+};
+btnClr.onclick = ()=>{ inEl.value=''; outEl.value=''; guideEl.value=''; toggleRatings(false); stop(); dot.className='bullet'; timer.textContent='0.0s'; sent(''); };
+btnGood.onclick=()=>rate('good'); btnReg.onclick=()=>rate('regular'); btnBad.onclick=()=>rate('bad');
+
+async function rate(kind){
+  if(!lastReply) return; toggleRatings(false);
+  try{
+    await fetch(BASE+'/trackRate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ rating:kind, text:lastReply, stage:stageEl.value, intent:guessIntent(inEl.value) })
+    });
+  }catch(_){}
+}
+function guessIntent(q=''){
+  q=q.toLowerCase();
+  if(/tiempo|agenda|ocupad/.test(q)) return 'tiempo';
+  if(/precio|caro|costo|descuento/.test(q)) return 'precio';
+  if(/cert/.test(q)) return 'cert';
+  if(/coursera|udemy|alura|competenc/.test(q)) return 'competencia';
+  if(/platzi|pitch/.test(q)) return 'pitch';
+  return '_panel';
+}
+</script>
+</body>
+</html>
