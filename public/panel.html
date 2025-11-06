@@ -106,6 +106,25 @@ input:focus,select:focus,textarea:focus{border-color: rgba(151,201,62,.65); box-
 .small{font-size:12px;color:#9fb6d6}
 .hr{height:1px;background:rgba(255,255,255,.08);margin:12px 0;border:0}
 kbd{background:#0f1524;border:1px solid var(--stroke);border-radius:6px;padding:2px 6px;font-size:12px}
+
+/* ====== MÉTRICAS (tarjetas y canvas) ====== */
+.kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:6px 0 14px}
+.kpi{
+  background:rgba(255,255,255,.04); border:1px solid var(--stroke); border-radius:14px; padding:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+}
+.kpi .label{font-size:12px; color:var(--mut)}
+.kpi .value{font-size:22px; font-weight:800; margin-top:4px}
+.kpi .sub{font-size:12px; color:#9fb6d6; margin-top:4px}
+.charts{display:grid; grid-template-columns:1fr; gap:12px}
+@media (min-width: 900px){ .charts{grid-template-columns:1fr 1fr} }
+.chart{
+  background:rgba(255,255,255,.04); border:1px solid var(--stroke); border-radius:14px; padding:12px; position:relative;
+}
+.chart h4{margin:0 0 8px; font-size:14px; color:#cfe3ff}
+canvas{width:100%; height:260px; display:block; background:linear-gradient(180deg, rgba(151,201,62,.05), rgba(151,201,62,0))}
+.chart .hint{position:absolute; right:12px; top:12px; font-size:11px; color:#88a2c6; opacity:.9}
+.badge-nd{display:inline-block; font-size:11px; padding:4px 8px; border-radius:999px; border:1px dashed rgba(255,255,255,.25); color:#a5b7d3}
 </style>
 </head>
 <body>
@@ -115,7 +134,7 @@ kbd{background:#0f1524;border:1px solid var(--stroke);border-radius:6px;padding:
       <span class="signal"><span id="b" class="bullet"></span><span id="t">0.0s</span></span>
     </div>
 
-    <!-- NAV (tabs internas, sin rutas nuevas) -->
+    <!-- NAV -->
     <nav class="nav">
       <button class="tab active" data-view="view-panel">Panel</button>
       <button class="tab" data-view="view-metrics">Métricas</button>
@@ -176,12 +195,53 @@ kbd{background:#0f1524;border:1px solid var(--stroke);border-radius:6px;padding:
       </div>
     </section>
 
-    <!-- ====================== VISTA: MÉTRICAS (placeholder) ====================== -->
+    <!-- ====================== VISTA: MÉTRICAS ====================== -->
     <section id="view-metrics" class="hidden">
       <div class="card">
-        <h3 style="margin:0 0 12px">Métricas (próximo paso)</h3>
-        <p class="small">Verás tarjetas (chats 24h, winrate, latencia) y gráficas. Mantendremos este estilo.</p>
-        <div class="small">// Usaremos <code>/stats</code> cuando demos el siguiente paso.</div>
+        <h3 style="margin:0 0 12px">Métricas en tiempo real <span class="small">(auto-refresh cada 30s)</span></h3>
+
+        <!-- KPIs -->
+        <div class="kpis">
+          <div class="kpi">
+            <div class="label">Total mostradas</div>
+            <div id="kpi-shown" class="value">—</div>
+            <div id="kpi-shown-sub" class="sub">acumulado</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Wins</div>
+            <div id="kpi-wins" class="value">—</div>
+            <div class="sub">buenas + 0.5 regulares</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Winrate</div>
+            <div id="kpi-winrate" class="value">—</div>
+            <div class="sub">% sobre mostradas</div>
+          </div>
+          <div class="kpi">
+            <div class="label">Usuarios activos</div>
+            <div class="value"><span class="badge-nd">N/D</span></div>
+            <div class="sub">requiere endpoint de actividad</div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts">
+          <div class="chart">
+            <h4>Consultas por intent</h4>
+            <span class="hint">Fuente: /stats</span>
+            <canvas id="chart-intent" width="600" height="260"></canvas>
+          </div>
+          <div class="chart">
+            <h4>Top textos (más mostrados)</h4>
+            <span class="hint">Fuente: /stats</span>
+            <canvas id="chart-top" width="600" height="260"></canvas>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+        <p class="small">
+          <b>Consultas por hora</b> y <b>Usuarios activos</b> necesitan un endpoint nuevo (p. ej. <code>/metrics/timeseries</code> con timestamps). Si quieres, siguiente paso te paso el diff mínimo en <code>server.js</code> para registrarlo sin romper nada.
+        </p>
       </div>
     </section>
 
@@ -275,14 +335,14 @@ localStorage.getItem("ferbot_api_base");</code></pre>
   </div>
 
 <script>
-/* BASE y pista visual (panel original intacto) */
+/* BASE y pista visual */
 const BASE = (localStorage.getItem('ferbot_api_base') || '') || (location.origin);
 const apiHintEl = document.getElementById('api-hint'); if(apiHintEl){ apiHintEl.textContent = BASE.replace(/^https?:\/\//,''); }
 
-/* Link directo al ZIP en Drive (descarga automática) */
+/* Link directo al ZIP en Drive */
 const DOWNLOAD_URL = "https://drive.google.com/uc?export=download&id=1VShxMQ5SKS62ZokbMwMoWzvLE0CDDFry";
 
-/* Tabs (mostrar/ocultar secciones) */
+/* Tabs */
 const tabs = Array.from(document.querySelectorAll('.tab'));
 const views = {
   'view-panel':   document.getElementById('view-panel'),
@@ -299,7 +359,7 @@ tabs.forEach(btn=>{
   });
 });
 
-/* ==================== LÓGICA ORIGINAL DEL PANEL (sin cambios) ==================== */
+/* ==================== LÓGICA ORIGINAL DEL PANEL ==================== */
 const nameEl = document.getElementById('name');
 const stageEl= document.getElementById('stage');
 const ctxEl  = document.getElementById('ctx');
@@ -375,28 +435,167 @@ const dlLink  = document.getElementById('dl-link');
 const copyBtn = document.getElementById('copy-dl');
 const probeBtn= document.getElementById('probe');
 const probeOut= document.getElementById('probe-out');
-
 if (dlLink)  dlLink.href = DOWNLOAD_URL;
-
 if (copyBtn) copyBtn.onclick = async () => {
-  try {
-    await navigator.clipboard.writeText(DOWNLOAD_URL);
-    copyBtn.textContent = "¡Copiado!";
-    setTimeout(()=> copyBtn.textContent = "Copiar enlace", 900);
-  } catch { alert("No se pudo copiar. Copia manual: " + DOWNLOAD_URL); }
+  try { await navigator.clipboard.writeText(DOWNLOAD_URL); copyBtn.textContent = "¡Copiado!"; setTimeout(()=> copyBtn.textContent = "Copiar enlace", 900); }
+  catch { alert("No se pudo copiar. Copia manual: " + DOWNLOAD_URL); }
 };
-
 if (probeBtn) probeBtn.onclick = async () => {
   probeOut.textContent = "Probando…";
-  try {
-    const r = await fetch(BASE + "/health");
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const j = await r.json();
-    probeOut.textContent = j.ok ? "✅ Conexión OK" : "⚠️ Respuesta inválida";
-  } catch (e) {
-    probeOut.textContent = "❌ Sin conexión (" + (e.message || "error") + ")";
-  }
+  try { const r = await fetch(BASE + "/health"); if (!r.ok) throw new Error("HTTP " + r.status); const j = await r.json(); probeOut.textContent = j.ok ? "✅ Conexión OK" : "⚠️ Respuesta inválida"; }
+  catch (e) { probeOut.textContent = "❌ Sin conexión (" + (e.message || "error") + ")"; }
 };
+
+/* ===== Métricas (auto-refresh cada 30s) ===== */
+const kShown = document.getElementById('kpi-shown');
+const kWins  = document.getElementById('kpi-wins');
+const kRate  = document.getElementById('kpi-winrate');
+
+const cIntent = document.getElementById('chart-intent');
+const cTop    = document.getElementById('chart-top');
+
+async function fetchStats(){
+  const r = await fetch(BASE + '/stats');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  return j?.rows || [];
+}
+
+function summarize(rows){
+  let shown=0, wins=0;
+  const byIntent = {};
+  for(const r of rows){
+    shown += Number(r.shown||0);
+    wins  += Number(r.wins||0);
+    const it = r.intent || '_';
+    byIntent[it] = (byIntent[it]||0) + Number(r.shown||0);
+  }
+  const winrate = shown>0 ? (wins/shown) : 0;
+  // top por mostradas
+  const top = [...rows].sort((a,b)=> (b.shown-a.shown) || ((b.winrate||0)-(a.winrate||0))).slice(0,8);
+  return { shown, wins, winrate, byIntent, top };
+}
+
+/* ——— Render “3D-fake” en canvas ——— */
+function draw3DBars(canvas, labels, values, opts={}){
+  if(!canvas) return;
+  const DPR = window.devicePixelRatio||1;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.clientWidth * DPR, H = canvas.clientHeight * DPR;
+  if(canvas.width!==W) canvas.width=W;
+  if(canvas.height!==H) canvas.height=H;
+  ctx.clearRect(0,0,W,H);
+
+  const pad = 28*DPR;
+  const baseY = H - pad*1.2;
+  const maxV = Math.max(1, ...values);
+  const n = values.length;
+  const gap = 18*DPR;
+  const bw = Math.max(24*DPR, (W - pad*2 - gap*(n-1)) / n);
+  const ox = pad;
+
+  // eje
+  ctx.strokeStyle = 'rgba(255,255,255,.15)';
+  ctx.lineWidth = 1*DPR;
+  ctx.beginPath(); ctx.moveTo(pad, baseY); ctx.lineTo(W-pad/2, baseY); ctx.stroke();
+
+  // escalas
+  ctx.fillStyle = 'rgba(255,255,255,.45)';
+  ctx.font = `${12*DPR}px ui-sans-serif`;
+  ctx.textAlign = 'center';
+  // barras
+  for(let i=0;i<n;i++){
+    const v = values[i];
+    const h = (v/maxV) * (H - pad*3);
+    const x = ox + i*(bw+gap);
+    const y = baseY - h;
+
+    // 3D faces (isométrico simple)
+    const front = ctx.createLinearGradient(0,y,0,baseY);
+    front.addColorStop(0, 'rgba(151,201,62,.95)');
+    front.addColorStop(1, 'rgba(127,176,47,.85)');
+    const side = 'rgba(70,95,22,.65)';
+    const topc = 'rgba(190,230,110,.95)';
+
+    // sombra
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.rect(x+3*DPR, y+6*DPR, bw, h); ctx.fill();
+
+    // frente
+    ctx.fillStyle = front;
+    ctx.beginPath(); ctx.rect(x, y, bw, h); ctx.fill();
+
+    // “techo”
+    const t = 8*DPR, s = 6*DPR;
+    ctx.fillStyle = topc;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x+t, y-t);
+    ctx.lineTo(x+bw+t, y-t);
+    ctx.lineTo(x+bw, y);
+    ctx.closePath(); ctx.fill();
+
+    // “lado”
+    ctx.fillStyle = side;
+    ctx.beginPath();
+    ctx.moveTo(x+bw, y);
+    ctx.lineTo(x+bw+t, y-t);
+    ctx.lineTo(x+bw+t, baseY-t);
+    ctx.lineTo(x+bw, baseY);
+    ctx.closePath(); ctx.fill();
+
+    // label
+    const lbl = (labels[i]||'').toString().slice(0,10);
+    ctx.save();
+    ctx.translate(x+bw/2, baseY + 16*DPR);
+    ctx.rotate(-Math.PI/12);
+    ctx.fillStyle = 'rgba(200,225,255,.85)';
+    ctx.fillText(lbl, 0, 0);
+    ctx.restore();
+
+    // valor
+    ctx.fillStyle = 'rgba(220,255,220,.9)';
+    ctx.textAlign='right';
+    ctx.fillText(String(v), x+bw-2*DPR, y-6*DPR);
+    ctx.textAlign='center';
+  }
+}
+
+function updateKPIs(sum){
+  kShown.textContent = sum.shown.toLocaleString('es-CO');
+  kWins.textContent  = sum.wins.toLocaleString('es-CO');
+  kRate.textContent  = (sum.winrate*100).toFixed(1) + '%';
+}
+
+async function refreshMetrics(){
+  try{
+    const rows = await fetchStats();
+    const sum  = summarize(rows);
+    updateKPIs(sum);
+
+    // intent chart
+    const intents = Object.keys(sum.byIntent);
+    const valsI   = intents.map(k=> sum.byIntent[k]||0);
+    draw3DBars(cIntent, intents, valsI);
+
+    // top texts chart (use shown)
+    const labelsTop = sum.top.map(r=>{
+      const t = (r.text||'').replace(/\s+/g,' ').trim();
+      return t.length>20 ? t.slice(0,20)+'…' : t;
+    });
+    const valsTop = sum.top.map(r=> Number(r.shown||0));
+    draw3DBars(cTop, labelsTop, valsTop);
+  }catch(e){
+    // si falla, no rompemos la UI
+    console.warn('metrics error', e);
+  }
+}
+
+// primera carga y auto-refresh 30s
+refreshMetrics();
+setInterval(refreshMetrics, 30_000);
+
+/* ==================== FIN MÉTRICAS ==================== */
 </script>
 </body>
 </html>
