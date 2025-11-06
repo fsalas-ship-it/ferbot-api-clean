@@ -6,24 +6,17 @@
 <title>FerBot · Panel</title>
 <style>
 /* ———————————————————————————————————————————————————————————————
-   FerBot · Panel (solo UI). Estructura intacta, diseño actualizado.
-   TODO(🧠): when AGI arrives, replace this CSS with a single prompt.
+   FerBot · Panel unificado (S1 = solo tabs + placeholders, sin lógica nueva)
    ——————————————————————————————————————————————————————————————— */
 :root{
-  --platzi:#97C93E;          /* Platzi Green */
-  --platzi-2:#7FB02F;
-  --ink:#E6F2FF;
-  --mut:#94a3b8;
-  --card:#0f162a80;          /* glass */
-  --stroke:rgba(255,255,255,.12);
+  --platzi:#97C93E; --platzi-2:#7FB02F;
+  --ink:#E6F2FF; --mut:#94a3b8;
+  --card:#0f162a80; --stroke:rgba(255,255,255,.12);
   --field:#0f1524;
 }
-
 *{box-sizing:border-box}
 html,body{
-  height:100%;
-  margin:0;
-  color:var(--ink);
+  height:100%; margin:0; color:var(--ink);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
   background:
     radial-gradient(1200px 600px at 10% -20%, rgba(151,201,62,.18), transparent 60%),
@@ -31,135 +24,85 @@ html,body{
     linear-gradient(180deg, #0b0f19 0%, #0b0f19 35%, #0d1122 100%);
   overflow-y:auto;
 }
-
-/* sutil grid “tech” */
 body::before{
-  content:"";
-  position:fixed; inset:0;
+  content:""; position:fixed; inset:0;
   background:
     linear-gradient(to right, rgba(255,255,255,.03) 1px, transparent 1px) 0 0/24px 24px,
     linear-gradient(to bottom, rgba(255,255,255,.03) 1px, transparent 1px) 0 0/24px 24px;
-  pointer-events:none;
-  mask:linear-gradient(#000, transparent 85%);
+  pointer-events:none; mask:linear-gradient(#000, transparent 85%);
+}
+.wrap{max-width:980px; margin:28px auto 64px; padding:0 16px}
+.header{display:flex; align-items:center; justify-content:space-between; margin:0 0 12px}
+h1{margin:0; font-size:22px; letter-spacing:.2px; display:flex; align-items:center; gap:10px}
+h1::after{content:""; display:block; width:120px; height:2px; border-radius:2px;
+  background:linear-gradient(90deg, rgba(151,201,62,.0), rgba(151,201,62,.65), rgba(151,201,62,.0));}
+
+/* NAV (tabs) */
+.nav{
+  display:flex; gap:8px; margin:10px 0 16px; flex-wrap:wrap;
+  background:rgba(16,23,39,.5); border:1px solid var(--stroke); border-radius:12px; padding:6px;
+}
+.tab{
+  appearance:none; border:1px solid transparent; background:transparent; color:#bed6ff;
+  padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:700; letter-spacing:.2px;
+}
+.tab:hover{border-color:var(--stroke)}
+.tab.active{
+  color:#062d1f;
+  background:linear-gradient(180deg, var(--platzi) 0%, var(--platzi-2) 100%);
+  box-shadow: 0 6px 16px rgba(151,201,62,.2);
 }
 
-/* contenedor */
-.wrap{
-  max-width:980px;
-  margin:28px auto 64px;
-  padding:0 16px;
-}
-
-/* header */
-.header{
-  display:flex; align-items:center; justify-content:space-between;
-  margin:0 0 12px;
-}
-h1{
-  margin:0;
-  font-size:22px;
-  letter-spacing:.2px;
-  display:flex; align-items:center; gap:10px;
-}
-h1::after{
-  content:"";
-  display:block; width:120px; height:2px; border-radius:2px;
-  background:linear-gradient(90deg, rgba(151,201,62,.0), rgba(151,201,62,.65), rgba(151,201,62,.0));
-}
-
-/* tarjeta “glass” */
+/* tarjeta glass */
 .card{
-  background:var(--card);
-  border:1px solid var(--stroke);
+  background:var(--card); border:1px solid var(--stroke);
   box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
-  backdrop-filter: blur(8px);
-  border-radius:18px;
-  padding:18px;
-  position:relative;
+  backdrop-filter: blur(8px); border-radius:18px; padding:18px; position:relative;
 }
-
-/* acento degradado (semi transparente) */
 .card::before{
-  content:"";
-  position:absolute; inset:-1px;
-  border-radius:18px;
-  padding:1px;
+  content:""; position:absolute; inset:-1px; border-radius:18px; padding:1px;
   background:linear-gradient(135deg, rgba(151,201,62,.6), rgba(151,201,62,0) 45%, rgba(151,201,62,.35));
   -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor; mask-composite:exclude;
-  pointer-events:none;
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
 }
 
-/* layout simple */
+/* layout form */
 .row{display:flex; gap:12px; align-items:flex-start}
 .row>div{flex:1}
-
-/* labels + fields */
 label{display:block; font-size:12px; color:var(--mut); margin:8px 0 6px}
 input,select,textarea{
-  width:100%;
-  background:var(--field);
-  border:1px solid var(--stroke);
-  color:#D7E7FF;
-  border-radius:12px;
-  padding:12px 12px;
-  outline:none;
-  transition: border-color .15s, box-shadow .15s, background .2s;
+  width:100%; background:var(--field); border:1px solid var(--stroke); color:#D7E7FF;
+  border-radius:12px; padding:12px 12px; outline:none; transition:border-color .15s, box-shadow .15s, background .2s;
 }
 textarea{min-height:96px; resize:vertical}
-input:focus,select:focus,textarea:focus{
-  border-color: rgba(151,201,62,.65);
-  box-shadow: 0 0 0 3px rgba(151,201,62,.15);
-}
+input:focus,select:focus,textarea:focus{border-color: rgba(151,201,62,.65); box-shadow: 0 0 0 3px rgba(151,201,62,.15)}
 
-/* sentiment badge */
+/* sentiment badge + timer */
 .badge{
-  display:inline-flex; align-items:center; gap:6px;
-  font-size:12px; padding:6px 10px;
-  border-radius:999px; border:1px solid var(--stroke); background:rgba(16,23,39,.85);
-  height:32px; margin:0 0 6px 6px;
+  display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:6px 10px;
+  border-radius:999px; border:1px solid var(--stroke); background:rgba(16,23,39,.85); height:32px; margin:0 0 6px 6px;
 }
 .badge .dot{width:8px;height:8px;border-radius:50%; background:#64748b}
-.badge.pos .dot{background:#22c55e}
-.badge.neu .dot{background:#f59e0b}
-.badge.neg .dot{background:#ef4444}
-
-/* timer */
-.signal{
-  display:inline-flex; align-items:center; gap:8px;
-  background:rgba(16,23,39,.8);
-  border:1px solid var(--stroke);
-  padding:6px 12px; border-radius:999px; font-variant-numeric:tabular-nums;
-}
+.badge.pos .dot{background:#22c55e} .badge.neu .dot{background:#f59e0b} .badge.neg .dot{background:#ef4444}
+.signal{display:inline-flex; align-items:center; gap:8px; background:rgba(16,23,39,.8); border:1px solid var(--stroke); padding:6px 12px; border-radius:999px; font-variant-numeric:tabular-nums}
 .bullet{width:10px;height:10px;border-radius:999px;background:#ef4444; box-shadow:0 0 12px #ef4444}
 .bullet.amber{background:#f59e0b; box-shadow:0 0 12px #f59e0b}
 .bullet.green{background:#22c55e; box-shadow:0 0 12px #22c55e}
 
 /* botones */
 .btns{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
-.btn{
-  padding:12px 14px; border-radius:12px; border:0; cursor:pointer; font-weight:800;
-  letter-spacing:.2px; transition: transform .05s ease, filter .2s;
-}
+.btn{padding:12px 14px; border-radius:12px; border:0; cursor:pointer; font-weight:800; letter-spacing:.2px; transition: transform .05s ease, filter .2s}
 .btn:active{ transform: translateY(1px) }
-.primary{
-  color:#062d1f;
-  background:linear-gradient(180deg, var(--platzi) 0%, var(--platzi-2) 100%);
-  box-shadow: 0 6px 16px rgba(151,201,62,.28);
-}
+.primary{color:#062d1f;background:linear-gradient(180deg, var(--platzi) 0%, var(--platzi-2) 100%);box-shadow: 0 6px 16px rgba(151,201,62,.28)}
 .ghost{ background:#1b2333; color:#cfe3ff; border:1px solid var(--stroke) }
 .good{ background:#19c37d; color:#062d1f; display:none }
 .reg { background:#fbbf24; color:#332200; display:none }
 .bad { background:#ef4444; color:#fff; display:none }
 
-/* footer huevo de pascua (discreto) */
-.footer{
-  margin:18px 0 0; text-align:center; color:var(--mut); font-size:12px;
-  opacity:.7;
-}
+/* helpers */
+.hidden{display:none !important}
+.footer{margin:18px 0 0; text-align:center; color:var(--mut); font-size:12px; opacity:.7}
 .footer code{color:#8BD626}
-.footer .hint{opacity:.6}
-/* 01000110 01100101 01110010 01000010 01101111 01110100 — si lees esto, te ganaste un ☕ */
 </style>
 </head>
 <body>
@@ -169,62 +112,126 @@ input:focus,select:focus,textarea:focus{
       <span class="signal"><span id="b" class="bullet"></span><span id="t">0.0s</span></span>
     </div>
 
-    <div class="card">
-      <div class="row">
-        <div>
-          <label>Nombre del cliente</label>
-          <input id="name" placeholder="Ej. Laura"/>
+    <!-- NAV (tabs internas, sin rutas nuevas) -->
+    <nav class="nav">
+      <button class="tab active" data-view="view-panel">Panel</button>
+      <button class="tab" data-view="view-metrics">Métricas</button>
+      <button class="tab" data-view="view-ranking">Ranking</button>
+      <button class="tab" data-view="view-install">Instalación</button>
+    </nav>
+
+    <!-- ====================== VISTA: PANEL (lo existente) ====================== -->
+    <section id="view-panel">
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>Nombre del cliente</label>
+            <input id="name" placeholder="Ej. Laura"/>
+          </div>
+          <div>
+            <label>Etapa</label>
+            <select id="stage">
+              <option value="integracion">Integración</option>
+              <option value="sondeo">Sondeo</option>
+              <option value="rebatir" selected>Rebatir</option>
+              <option value="pre_cierre">Pre-cierre</option>
+              <option value="cierre">Cierre</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label>Etapa</label>
-          <select id="stage">
-            <option value="integracion">Integración</option>
-            <option value="sondeo">Sondeo</option>
-            <option value="rebatir" selected>Rebatir</option>
-            <option value="pre_cierre">Pre-cierre</option>
-            <option value="cierre">Cierre</option>
-          </select>
+
+        <label>Contexto (opcional)</label>
+        <input id="ctx" placeholder="Notas breves para el bot..."/>
+
+        <div class="row" style="align-items:flex-end;margin-top:10px">
+          <div style="flex:1">
+            <label>Texto del cliente / Objeción</label>
+            <textarea id="in" placeholder="Selecciona texto del chat o escribe aquí..."></textarea>
+          </div>
+          <div class="badge neu" id="sent">
+            <span class="dot"></span><span id="sTxt">Neutral</span>
+          </div>
+        </div>
+
+        <label>Explicación (POR QUÉ + SIGUIENTE PASO)</label>
+        <textarea id="guide" placeholder="Aquí verás POR QUÉ y el SIGUIENTE PASO..."></textarea>
+
+        <label>Respuesta (lista para pegar)</label>
+        <textarea id="out" placeholder="Mensaje breve (≤ 2 frases)."></textarea>
+
+        <div class="btns">
+          <button id="gen" class="btn primary">Generar</button>
+          <button id="clr" class="btn ghost">Clear</button>
+          <button id="g" class="btn good">👍 Buena</button>
+          <button id="r" class="btn reg">😐 Regular</button>
+          <button id="b1" class="btn bad">👎 Mala</button>
+        </div>
+
+        <div class="footer">
+          // api: <code id="api-hint">loading…</code>
         </div>
       </div>
+    </section>
 
-      <label>Contexto (opcional)</label>
-      <input id="ctx" placeholder="Notas breves para el bot..."/>
-
-      <div class="row" style="align-items:flex-end;margin-top:10px">
-        <div style="flex:1">
-          <label>Texto del cliente / Objeción</label>
-          <textarea id="in" placeholder="Selecciona texto del chat o escribe aquí..."></textarea>
-        </div>
-        <div class="badge neu" id="sent">
-          <span class="dot"></span><span id="sTxt">Neutral</span>
-        </div>
+    <!-- ====================== VISTA: MÉTRICAS (placeholder S1) ====================== -->
+    <section id="view-metrics" class="hidden">
+      <div class="card">
+        <h3 style="margin:0 0 12px">Métricas (próximo paso)</h3>
+        <p style="margin:0 0 8px; color:var(--mut)">Aquí verás tarjetas (chats 24h, msgs 24h, latencia, fail rate) y una serie temporal. Mantendremos este estilo.</p>
+        <div style="margin-top:8px; font-size:12px; color:#9fb6d6">// Sugerencia: usaremos /stats y /metrics/* cuando pases el siguiente gate.</div>
       </div>
+    </section>
 
-      <label>Explicación (POR QUÉ + SIGUIENTE PASO)</label>
-      <textarea id="guide" placeholder="Aquí verás POR QUÉ y el SIGUIENTE PASO..."></textarea>
-
-      <label>Respuesta (lista para pegar)</label>
-      <textarea id="out" placeholder="Mensaje breve (≤ 2 frases)."></textarea>
-
-      <div class="btns">
-        <button id="gen" class="btn primary">Generar</button>
-        <button id="clr" class="btn ghost">Clear</button>
-        <button id="g" class="btn good">👍 Buena</button>
-        <button id="r" class="btn reg">😐 Regular</button>
-        <button id="b1" class="btn bad">👎 Mala</button>
+    <!-- ====================== VISTA: RANKING (placeholder S1) ====================== -->
+    <section id="view-ranking" class="hidden">
+      <div class="card">
+        <h3 style="margin:0 0 12px">Ranking de respuestas (próximo paso)</h3>
+        <p style="margin:0 0 8px; color:var(--mut)">Tabla con winrate, shown, intent y stage, basada en <code>/stats</code>. Mismo look del panel.</p>
+        <div style="margin-top:8px; font-size:12px; color:#9fb6d6">// Siguiente iteración: filtros por intent/stage y ordenar por winrate.</div>
       </div>
+    </section>
 
-      <div class="footer">
-        <span class="hint">// api: <code id="api-hint">loading…</code></span>
+    <!-- ====================== VISTA: INSTALACIÓN (placeholder S1) ====================== -->
+    <section id="view-install" class="hidden">
+      <div class="card">
+        <h3 style="margin:0 0 12px">Instalación rápida</h3>
+        <ol style="margin:0; padding-left:18px; line-height:1.6">
+          <li>Abre <b>chrome://extensions/</b> → Modo desarrollador.</li>
+          <li><b>Cargar descomprimida</b> → carpeta <code>extension</code>.</li>
+          <li>En Hilos → DevTools → Console:
+            <pre style="background:#0f1524;border:1px solid var(--stroke);border-radius:10px;padding:10px;margin:8px 0 0"><code>localStorage.setItem("ferbot_api_base","https://ferbot-api-clean.onrender.com");
+localStorage.getItem("ferbot_api_base");</code></pre>
+          </li>
+          <li>Recarga la pestaña y listo.</li>
+        </ol>
+        <div style="margin-top:10px; font-size:12px; color:#9fb6d6">// Próximo paso: botón “Probar /health” aquí mismo.</div>
       </div>
-    </div>
+    </section>
   </div>
 
 <script>
-/* —————————————————— JS original (llamadas intactas) —————————————————— */
+/* BASE y pista visual (panel original intacto) */
 const BASE = (localStorage.getItem('ferbot_api_base') || '') || (location.origin);
-document.getElementById('api-hint').textContent = BASE.replace(/^https?:\/\//,'');
+const apiHintEl = document.getElementById('api-hint'); if(apiHintEl){ apiHintEl.textContent = BASE.replace(/^https?:\/\//,''); }
 
+/* Tabs (mostrar/ocultar secciones) */
+const tabs = Array.from(document.querySelectorAll('.tab'));
+const views = {
+  'view-panel':   document.getElementById('view-panel'),
+  'view-metrics': document.getElementById('view-metrics'),
+  'view-ranking': document.getElementById('view-ranking'),
+  'view-install': document.getElementById('view-install'),
+};
+tabs.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    tabs.forEach(t=>t.classList.remove('active')); btn.classList.add('active');
+    Object.values(views).forEach(v=>v.classList.add('hidden'));
+    const id = btn.getAttribute('data-view');
+    if(views[id]) views[id].classList.remove('hidden');
+  });
+});
+
+/* ==================== LÓGICA ORIGINAL DEL PANEL (sin cambios) ==================== */
 const nameEl = document.getElementById('name');
 const stageEl= document.getElementById('stage');
 const ctxEl  = document.getElementById('ctx');
@@ -242,37 +249,23 @@ const badge  = document.getElementById('sent');
 const bTxt   = document.getElementById('sTxt');
 
 let clock=null, t0=0, lastReply=null;
-
-function start() {
-  stop(); t0 = performance.now();
-  clock = setInterval(()=>{
-    const dt = (performance.now()-t0)/1000;
-    timer.textContent = dt.toFixed(1)+'s';
-    dot.className='bullet'+(dt<2?'':' '+(dt<4?'amber':'green'));
-  }, 100);
-}
+function start(){ stop(); t0=performance.now(); clock=setInterval(()=>{ const dt=(performance.now()-t0)/1000; timer.textContent=dt.toFixed(1)+'s'; dot.className='bullet'+(dt<2?'':' '+(dt<4?'amber':'green')); },100) }
 function stop(){ if(clock) clearInterval(clock); clock=null; }
 function toggleRatings(show){ [btnGood,btnReg,btnBad].forEach(x=>x.style.display=show?'inline-block':'none'); }
 function sent(text){
-  const s=(text||'').toLowerCase();
-  let cls='neu', t='Neutral';
+  const s=(text||'').toLowerCase(); let cls='neu', t='Neutral';
   if (/(no puedo|caro|no sirve|difícil|no tengo tiempo)/i.test(s)) {cls='neg';t='Negativo'}
   else if (/(gracias|perfecto|me interesa|genial|bien)/i.test(s)) {cls='pos';t='Positivo'}
   badge.classList.remove('pos','neu','neg'); badge.classList.add(cls); bTxt.textContent=t;
 }
-inEl.addEventListener('input',()=>sent(inEl.value));
-document.addEventListener('mouseup',()=>setTimeout(()=>{
-  const sel = window.getSelection()?.toString()?.trim();
-  if(sel){ inEl.value=sel; sent(sel); }
-},30));
+document.getElementById('in').addEventListener('input',()=>sent(inEl.value));
+document.addEventListener('mouseup',()=>setTimeout(()=>{const sel=window.getSelection()?.toString()?.trim(); if(sel){ inEl.value=sel; sent(sel); }},30));
 
-btnGen.onclick = async ()=>{
-  const q=(inEl.value||'').trim();
-  if(!q){ alert('Escribe o selecciona un texto primero.'); return; }
+document.getElementById('gen').onclick = async ()=>{
+  const q=(inEl.value||'').trim(); if(!q){ alert('Escribe o selecciona un texto primero.'); return; }
   guideEl.value=''; outEl.value=''; toggleRatings(false); start();
   try{
-    const r = await fetch(BASE+'/assist_trainer',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await fetch(BASE+'/assist_trainer',{method:'POST',headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ question:q, customerName:(nameEl.value||'Cliente'), stage:stageEl.value, context:ctxEl.value })
     });
     stop(); dot.className='bullet green';
@@ -286,19 +279,15 @@ btnGen.onclick = async ()=>{
     lastReply = reply; toggleRatings(true);
   }catch(e){ stop(); alert('No se pudo generar. Revisa que el servidor esté arriba.'); }
 };
-btnClr.onclick = ()=>{
-  inEl.value=''; outEl.value=''; guideEl.value='';
-  toggleRatings(false); stop(); dot.className='bullet'; timer.textContent='0.0s'; sent('');
-};
-btnGood.onclick=()=>rate('good');
-btnReg.onclick=()=>rate('regular');
-btnBad.onclick=()=>rate('bad');
+document.getElementById('clr').onclick = ()=>{ inEl.value=''; outEl.value=''; guideEl.value=''; toggleRatings(false); stop(); dot.className='bullet'; timer.textContent='0.0s'; sent(''); };
+document.getElementById('g').onclick=()=>rate('good');
+document.getElementById('r').onclick=()=>rate('regular');
+document.getElementById('b1').onclick=()=>rate('bad');
 
 async function rate(kind){
   if(!lastReply) return; toggleRatings(false);
   try{
-    await fetch(BASE+'/trackRate',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+    await fetch(BASE+'/trackRate',{method:'POST',headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ rating:kind, text:lastReply, stage:stageEl.value, intent:guessIntent(inEl.value) })
     });
   }catch(_){}
