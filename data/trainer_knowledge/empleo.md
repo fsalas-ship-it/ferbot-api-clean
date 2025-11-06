@@ -1,24 +1,28 @@
-### integracion
-REPLY: Con el plan anual puedes certificarte y fortalecer tu perfil para mejorar empleo e ingresos durante el año.
-WHY: Conecta aprendizaje con resultado tangible.
-NEXT: Mostrar rutas con impacto laboral.
+## Empleo y ascenso (Ferney)
 
-### sondeo
-REPLY: Cuéntame, ¿quieres mejorar donde estás o buscar un nuevo empleo?
-WHY: Define enfoque laboral.
-NEXT: Relacionar con rutas o escuelas pertinentes.
+- Objetivo: convertir estudio en empleo/ascenso con evidencia.
+- Ruta por rol, práctica guiada y certificado verificable.
+- Microhábito diario + hitos semanales → progreso visible.
 
-### rebatir
-REPLY: Justo el plan anual ayuda a mantener constancia hasta lograr ese cambio laboral. Tú marcas el ritmo.
-WHY: Rebate duda con promesa de continuidad.
-NEXT: Mostrar ejemplos o resultados de otros estudiantes.
+### Cómo guiar
+1) Fija meta: rol/ascenso.
+2) Selecciona ruta: junior → ready to work.
+3) Confirma hábito: 10–15 min/día.
+4) Cierra: activa el plan anual hoy.
 
-### pre_cierre
-REPLY: Muchos logran ascensos o cambios laborales gracias al plan anual y las certificaciones digitales.
-WHY: Refuerza resultado social comprobado.
-NEXT: Preparar cierre con testimonio o ejemplo.
+### Ejemplos
 
-### cierre
-REPLY: Activemos tu plan anual y empieza hoy a construir ese salto profesional. El momento es ahora.
-WHY: Cierra vinculando acción inmediata con meta laboral.
-NEXT: Confirmar suscripción anual.
+Cliente: “Quiero cambiar de trabajo.”
+REPLY: Activemos tu plan anual y arrancamos con la ruta a ese rol; avanzas 10–15 min al día y certificas tu progreso para CV/LinkedIn. ¿Te lo activo?
+WHY: Conecta meta laboral con método y validación.
+NEXT: Elige ruta por rol y pacta primer hito; confirma activación.
+
+Cliente: “Busco ascenso.”
+REPLY: Perfecto; con el anual sigues una ruta en las habilidades clave de tu equipo y certificas cada avance. ¿Activamos hoy y definimos tu primer objetivo?
+WHY: Mapea ruta a necesidades del cargo.
+NEXT: Acordar primer módulo + fecha de revisión; confirmar plan.
+
+Cliente: “No sé por dónde empezar.”
+REPLY: Para eso está la ruta: te lleva paso a paso hasta quedar listo para el trabajo, con certificados. ¿Activos el plan y empezamos hoy?
+WHY: Elimina parálisis por elección; CTA directa.
+NEXT: Elegir ruta inicial y horario diario; confirmar.
