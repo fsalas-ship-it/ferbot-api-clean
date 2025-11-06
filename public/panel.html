@@ -6,7 +6,7 @@
 <title>FerBot · Panel</title>
 <style>
 /* ———————————————————————————————————————————————————————————————
-   FerBot · Panel unificado (S1 = solo tabs + placeholders, sin lógica nueva)
+   FerBot · Panel unificado
    ——————————————————————————————————————————————————————————————— */
 :root{
   --platzi:#97C93E; --platzi-2:#7FB02F;
@@ -103,6 +103,9 @@ input:focus,select:focus,textarea:focus{border-color: rgba(151,201,62,.65); box-
 .hidden{display:none !important}
 .footer{margin:18px 0 0; text-align:center; color:var(--mut); font-size:12px; opacity:.7}
 .footer code{color:#8BD626}
+.small{font-size:12px;color:#9fb6d6}
+.hr{height:1px;background:rgba(255,255,255,.08);margin:12px 0;border:0}
+kbd{background:#0f1524;border:1px solid var(--stroke);border-radius:6px;padding:2px 6px;font-size:12px}
 </style>
 </head>
 <body>
@@ -120,7 +123,7 @@ input:focus,select:focus,textarea:focus{border-color: rgba(151,201,62,.65); box-
       <button class="tab" data-view="view-install">Instalación</button>
     </nav>
 
-    <!-- ====================== VISTA: PANEL (lo existente) ====================== -->
+    <!-- ====================== VISTA: PANEL ====================== -->
     <section id="view-panel">
       <div class="card">
         <div class="row">
@@ -173,38 +176,100 @@ input:focus,select:focus,textarea:focus{border-color: rgba(151,201,62,.65); box-
       </div>
     </section>
 
-    <!-- ====================== VISTA: MÉTRICAS (placeholder S1) ====================== -->
+    <!-- ====================== VISTA: MÉTRICAS (placeholder) ====================== -->
     <section id="view-metrics" class="hidden">
       <div class="card">
         <h3 style="margin:0 0 12px">Métricas (próximo paso)</h3>
-        <p style="margin:0 0 8px; color:var(--mut)">Aquí verás tarjetas (chats 24h, msgs 24h, latencia, fail rate) y una serie temporal. Mantendremos este estilo.</p>
-        <div style="margin-top:8px; font-size:12px; color:#9fb6d6">// Sugerencia: usaremos /stats y /metrics/* cuando pases el siguiente gate.</div>
+        <p class="small">Verás tarjetas (chats 24h, winrate, latencia) y gráficas. Mantendremos este estilo.</p>
+        <div class="small">// Usaremos <code>/stats</code> cuando demos el siguiente paso.</div>
       </div>
     </section>
 
-    <!-- ====================== VISTA: RANKING (placeholder S1) ====================== -->
+    <!-- ====================== VISTA: RANKING (placeholder) ====================== -->
     <section id="view-ranking" class="hidden">
       <div class="card">
         <h3 style="margin:0 0 12px">Ranking de respuestas (próximo paso)</h3>
-        <p style="margin:0 0 8px; color:var(--mut)">Tabla con winrate, shown, intent y stage, basada en <code>/stats</code>. Mismo look del panel.</p>
-        <div style="margin-top:8px; font-size:12px; color:#9fb6d6">// Siguiente iteración: filtros por intent/stage y ordenar por winrate.</div>
+        <p class="small">Tabla con winrate, shown, intent y stage, basada en <code>/stats</code>. Mismo look del panel.</p>
       </div>
     </section>
 
-    <!-- ====================== VISTA: INSTALACIÓN (placeholder S1) ====================== -->
+    <!-- ====================== VISTA: INSTALACIÓN (completa) ====================== -->
     <section id="view-install" class="hidden">
       <div class="card">
-        <h3 style="margin:0 0 12px">Instalación rápida</h3>
-        <ol style="margin:0; padding-left:18px; line-height:1.6">
-          <li>Abre <b>chrome://extensions/</b> → Modo desarrollador.</li>
-          <li><b>Cargar descomprimida</b> → carpeta <code>extension</code>.</li>
-          <li>En Hilos → DevTools → Console:
+        <h3 style="margin:0 0 12px">Instalación rápida (Windows y Mac)</h3>
+
+        <div class="row" style="gap:10px; align-items:center; margin-bottom:10px">
+          <a id="dl-link" class="btn primary" href="#" download>⬇️ Descargar extensión (.zip)</a>
+          <button id="copy-dl" class="btn ghost">Copiar enlace</button>
+          <button id="probe" class="btn ghost">Probar conexión</button>
+          <span id="probe-out" class="small"></span>
+        </div>
+
+        <div class="hr"></div>
+
+        <h4 style="margin:8px 0 6px">1) Descarga y descomprime</h4>
+        <ul class="small" style="margin:0 0 10px 16px; line-height:1.6">
+          <li>Haz clic en <b>Descargar extensión (.zip)</b>.</li>
+          <li>Abre el ZIP y <b>extrae</b> su contenido a una carpeta. Dentro debes ver <code>manifest.json</code> y <code>contentScript.js</code>.</li>
+        </ul>
+
+        <h4 style="margin:8px 0 6px">2) Carga la extensión en el navegador</h4>
+        <div class="row">
+          <div>
+            <b>Windows (Chrome/Edge)</b>
+            <ol class="small" style="margin:6px 0 0 18px; line-height:1.6">
+              <li>Abre <b>chrome://extensions/</b> en Chrome (o <b>edge://extensions/</b> en Edge).</li>
+              <li>Activa <b>Developer mode</b> (arriba a la derecha).</li>
+              <li>Haz clic en <b>Load unpacked</b> / <b>Cargar descomprimida</b>.</li>
+              <li>Selecciona la carpeta que descomprimiste (donde está <code>manifest.json</code>).</li>
+            </ol>
+          </div>
+          <div>
+            <b>Mac (Chrome)</b>
+            <ol class="small" style="margin:6px 0 0 18px; line-height:1.6">
+              <li>Abre <b>chrome://extensions/</b>.</li>
+              <li>Activa <b>Developer mode</b>.</li>
+              <li>Clic en <b>Load unpacked</b>.</li>
+              <li>Elige la carpeta descomprimida (con <code>manifest.json</code> adentro).</li>
+            </ol>
+          </div>
+        </div>
+
+        <h4 style="margin:12px 0 6px">3) Conectar con el backend (una sola vez)</h4>
+        <p class="small" style="margin:0 0 8px">Abre la página donde usarás FerBot (Hilos). Luego:</p>
+        <ol class="small" style="margin:0 0 10px 18px; line-height:1.6">
+          <li>Abre las herramientas de desarrollador: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> (Windows) o <kbd>⌘</kbd>+<kbd>⌥</kbd>+<kbd>I</kbd> (Mac).</li>
+          <li>Ve a la pestaña <b>Console</b> y pega:
             <pre style="background:#0f1524;border:1px solid var(--stroke);border-radius:10px;padding:10px;margin:8px 0 0"><code>localStorage.setItem("ferbot_api_base","https://ferbot-api-clean.onrender.com");
 localStorage.getItem("ferbot_api_base");</code></pre>
+            Debe devolver la misma URL.
           </li>
-          <li>Recarga la pestaña y listo.</li>
+          <li>Recarga la página.</li>
         </ol>
-        <div style="margin-top:10px; font-size:12px; color:#9fb6d6">// Próximo paso: botón “Probar /health” aquí mismo.</div>
+
+        <h4 style="margin:12px 0 6px">4) Prueba rápida</h4>
+        <ul class="small" style="margin:0 0 10px 16px; line-height:1.6">
+          <li>Haz clic en el botón <b>Probar conexión</b>. Debe mostrar “✅ Conexión OK”.</li>
+          <li>Abre FerBot, escribe una objeción corta y presiona <b>Generar</b>.</li>
+        </ul>
+
+        <div class="hr"></div>
+
+        <h4 style="margin:12px 0 6px">Errores comunes y solución</h4>
+        <ul class="small" style="margin:0 0 6px 16px; line-height:1.6">
+          <li><b>No aparece el botón “Load unpacked”</b> → Activa <b>Developer mode</b> en la esquina superior derecha.</li>
+          <li><b>“Manifest no found” o carpeta vacía</b> → Asegúrate de seleccionar la <b>carpeta descomprimida</b> que contiene <code>manifest.json</code> (no el ZIP).</li>
+          <li><b>El bot no responde</b> → Verifica <b>Probar conexión</b>. Si falla, vuelve a pegar el comando de <code>localStorage.setItem("ferbot_api_base", "...")</code> y recarga.</li>
+          <li><b>Se demora la primera respuesta</b> → Render puede “despertar”; intenta nuevamente tras unos segundos.</li>
+          <li><b>Quiero actualizar</b> → Si cambiaste <i>solo</i> respuestas del bot, no hace falta reinstalar: se actualizan en tiempo real tras <code>/admin/reloadTrainer</code>. Si cambiaste la extensión, vuelve a <b>chrome://extensions/</b> y pulsa <b>Update</b> o carga de nuevo.</li>
+        </ul>
+
+        <div class="hr"></div>
+
+        <h4 style="margin:12px 0 6px">¿Necesitas ayuda?</h4>
+        <p class="small" style="margin:0">
+          Slack: <b>@ferney salas</b> &nbsp;•&nbsp; Correo: <b>fsalas@platzi.com</b>
+        </p>
       </div>
     </section>
   </div>
@@ -213,6 +278,9 @@ localStorage.getItem("ferbot_api_base");</code></pre>
 /* BASE y pista visual (panel original intacto) */
 const BASE = (localStorage.getItem('ferbot_api_base') || '') || (location.origin);
 const apiHintEl = document.getElementById('api-hint'); if(apiHintEl){ apiHintEl.textContent = BASE.replace(/^https?:\/\//,''); }
+
+/* Link directo al ZIP en Drive (descarga automática) */
+const DOWNLOAD_URL = "https://drive.google.com/uc?export=download&id=1VShxMQ5SKS62ZokbMwMoWzvLE0CDDFry";
 
 /* Tabs (mostrar/ocultar secciones) */
 const tabs = Array.from(document.querySelectorAll('.tab'));
@@ -301,6 +369,34 @@ function guessIntent(q=''){
   if(/platzi|pitch/.test(q)) return 'pitch';
   return '_panel';
 }
+
+/* ===== Instalación: botones ===== */
+const dlLink  = document.getElementById('dl-link');
+const copyBtn = document.getElementById('copy-dl');
+const probeBtn= document.getElementById('probe');
+const probeOut= document.getElementById('probe-out');
+
+if (dlLink)  dlLink.href = DOWNLOAD_URL;
+
+if (copyBtn) copyBtn.onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(DOWNLOAD_URL);
+    copyBtn.textContent = "¡Copiado!";
+    setTimeout(()=> copyBtn.textContent = "Copiar enlace", 900);
+  } catch { alert("No se pudo copiar. Copia manual: " + DOWNLOAD_URL); }
+};
+
+if (probeBtn) probeBtn.onclick = async () => {
+  probeOut.textContent = "Probando…";
+  try {
+    const r = await fetch(BASE + "/health");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    probeOut.textContent = j.ok ? "✅ Conexión OK" : "⚠️ Respuesta inválida";
+  } catch (e) {
+    probeOut.textContent = "❌ Sin conexión (" + (e.message || "error") + ")";
+  }
+};
 </script>
 </body>
 </html>
