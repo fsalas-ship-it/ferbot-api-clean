@@ -1,37 +1,27 @@
-# INTENTO: CERTIFICACIONES
-- Resalta certificados digitales verificables y su impacto en empleabilidad.
-- Conecta a beneficio de vida (mejorar HOJA DE VIDA/LinkedIn).
+## Certificación verificable (Ferney)
 
-EJEMPLOS REPLY:
-- "Sí, con el anual obtienes certificados digitales verificables para respaldar tu avance. ¿Activamos hoy y dejas el primero en tu perfil?"
-- "Las rutas incluyen certificados que validan tus nuevas habilidades. ¿Activamos el anual y te guío para lograr el primero pronto?"
+- Certificados digitales verificables (y en casos físicos) que respaldan tu avance.
+- Sirven para CV, LinkedIn y procesos de reclutamiento/ascenso.
+- Diferencia: no es solo terminar videos; completas una ruta y validas resultados.
 
-WHY:
-- Autoridad y prueba social → empleabilidad real.
+### Cómo explicarlo
+- Certificar = convertir tu estudio en evidencia visible y validable.
+- Suma puntos en filtros ATS y entrevistas; muestra consistencia (ruta + hábito).
+- Certificados + proyectos = prueba de habilidades aplicadas.
 
-NEXT:
-- Activar anual y proponer primera meta certificable.
-### integracion
-REPLY: En Platzi las certificaciones digitales son verificables y te respaldan en empleo e ingresos.
-WHY: Muestra valor de credenciales reales.
-NEXT: Sugerir explorar escuela con más impacto en su perfil.
+### Ejemplos
 
-### sondeo
-REPLY: ¿Buscas certificarte para crecer en tu empleo actual o para cambiar de sector?
-WHY: Detecta objetivo profesional.
-NEXT: Relacionar respuesta con rutas y escuelas.
+Cliente: “¿El certificado sí sirve?”
+REPLY: Sí; es verificable y respalda que completaste la ruta. Te ayuda en CV/LinkedIn y entrevistas. ¿Activamos tu plan anual para empezar la ruta que te certifica?
+WHY: Aclara valor práctico y contexto de uso; orienta a acción.
+NEXT: Propón una ruta alineada a su meta y confirma activación.
 
-### rebatir
-REPLY: Sí, nuestros certificados están verificados y los puedes compartir en LinkedIn; fortalecen tu perfil profesional.
-WHY: Responde objeción con prueba de valor.
-NEXT: Conducir a probar su primera ruta certificada.
+Cliente: “Mi empresa pide validación.”
+REPLY: Perfecto: los certificados verificables demuestran tu avance formal y continuo. ¿Te activo el plan y avanzamos con la ruta requerida?
+WHY: Conecta requisito empresarial con solución directa.
+NEXT: Elige ruta alineada a rol y acuerda fecha del primer hito certificado.
 
-### pre_cierre
-REPLY: Con el plan anual puedes obtener varias certificaciones y mostrar progreso constante todo el año.
-WHY: Refuerza percepción de crecimiento continuo.
-NEXT: Preparar cierre reforzando retorno profesional.
-
-### cierre
-REPLY: Activemos tu acceso anual para que empieces a certificarte desde hoy y consolides tu perfil digital.
-WHY: Cierra con enfoque profesional inmediato.
-NEXT: Guiar a confirmar la suscripción anual.
+Cliente: “Prefiero aprender sin certificados.”
+REPLY: Puedes, pero certificar te abre puertas y demuestra consistencia. Si hoy activas el anual, avanzas en bloques cortos y sellas tus logros. ¿Lo activamos?
+WHY: Reencuadra utilidad del certificado sin imponer; CTA amable.
+NEXT: Presenta ruta y primer módulo; confirma plan.
