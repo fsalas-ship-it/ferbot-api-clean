@@ -1,38 +1,50 @@
-# INTENTO: PRECIO
-- Mueve de precio → valor/retorno; anual diluye costo y libera todo (escuelas, certificados, offline).
-- Evita cifras si no las pidió; habla de lo que habilita el año completo.
-- Cierre: CTA a activar anual hoy.
+## Precio, valor y diferenciación (Ferney)
 
-EJEMPLOS REPLY:
-- "Más que precio, miremos valor: con el anual tienes rutas, certificados y todo el contenido sin límites. ¿Lo activamos hoy y lo aprovechas de una?"
-- "El plan anual cubre todo lo que necesitas para crecer y certificarte. ¿Quieres activarlo ya y te acompaño con la ruta que más te sirve?"
+La plataforma Platzi ofrece rutas de aprendizaje estructuradas que van desde nivel introductorio hasta perfiles profesionales especializados, permitiendo pasar de “no sé nada” a “estoy listo para el trabajo”.
 
-WHY:
-- Reencuadro precio en valor/retorno + acceso total anual.
+Gracias a sus certificados verificables (digitales y en algunos casos físicos), cada estudiante obtiene respaldo tangible en su perfil profesional para empleo o ascenso.
 
-NEXT:
-- Si pregunta cifras, darlas claras y cortas; proponer activación hoy.
-### integracion
-REPLY: Te cuento, el plan anual incluye todas las escuelas y certificados, así aprovechas cada mes al máximo.
-WHY: Introduce valor y amplitud del plan.
-NEXT: Mostrar escuelas o rutas más relevantes.
+Además, Platzi ha sido reconocida en Colombia como aliada en programas de desarrollo de habilidades digitales, validando su impacto y relevancia para el mercado laboral.
 
-### sondeo
-REPLY: Cuando piensas en invertir en ti, ¿buscas más mejorar ingresos o estabilidad laboral?
-WHY: Identifica motivador económico real.
-NEXT: Si responde, relacionar con retorno del plan anual.
+---
 
-### rebatir
-REPLY: Te entiendo, pero el anual termina saliendo más barato que cualquier curso suelto y te da acceso a todo un año de progreso.
-WHY: Transforma precio en valor y retorno.
-NEXT: Mostrar beneficios tangibles (certificados, rutas, comunidad).
+### Cómo explicarlo al cliente
 
-### pre_cierre
-REPLY: Muchos estudiantes logran nuevas oportunidades porque el plan anual les permitió formarse sin parar.
-WHY: Muestra retorno comprobado.
-NEXT: Preparar cierre con enfoque en resultado real.
+Cuando un cliente pregunta “¿Qué obtengo por mi inversión?”, el asesor puede responder:
+> Al activar el plan anual tendrás acceso a rutas completas, no solo cursos aislados; certificarás tu aprendizaje y tendrás respaldo formal que abre puertas en empleabilidad o proyectos propios.
 
-### cierre
-REPLY: Invertir en ti por un año vale más que cualquier gasto momentáneo. ¿Activamos tu acceso anual hoy?
-WHY: Llama a acción con enfoque en inversión inteligente.
-NEXT: Guiar al cierre del pago anual.
+Muchos competidores ofrecen cursos sueltos o certificaciones sin guía, mientras que Platzi entrega:
+- La **ruta dirigida** (qué aprender y en qué orden).
+- El **certificado verificable** (validación real del progreso).
+- El **acompañamiento constante** (microhábito y soporte).
+
+Por tanto, la inversión en el plan anual no es solo “ver vídeos”, sino **abrir una ventana de oportunidades profesionales**: la ruta te guía, el certificado te valida y tú avanzas hacia resultados concretos.
+
+---
+
+### Ejemplos de objeción
+
+**Cliente:** “Hay otros cursos más baratos.”  
+REPLY: Entiendo, hay opciones más baratas, pero no con rutas completas y certificados verificables que respalden tu avance profesional. Con el anual, inviertes una vez y abres tu ruta de crecimiento real.  
+WHY: Reencuadra precio → valor y resultado. Muestra que el anual no es gasto sino inversión con retorno.  
+NEXT: Refuerza ruta + certificación + acompañamiento; invita a activar el plan anual hoy.
+
+---
+
+**Cliente:** “¿Por qué Platzi y no otra plataforma?”  
+REPLY: Porque Platzi no solo da cursos, te lleva paso a paso de “no sé nada” a “listo para trabajar”, con certificados verificables y respaldo reconocido en el mercado laboral.  
+WHY: Destaca estructura y validación. Diferencia rutas guiadas frente a cursos sueltos.  
+NEXT: Presenta una ruta según su meta (empleo, ascenso o proyecto) y sugiere activar su plan anual.
+
+---
+
+**Cliente:** “¿Y si no tengo tiempo?”  
+REPLY: Justo por eso el plan anual te sirve: con clases cortas avanzas 10–15 min al día, pero con todo el camino estructurado y certificado al final.  
+WHY: Vincula objeción de tiempo con el valor del anual: avance flexible pero validado.  
+NEXT: Sugiere rutina diaria, muestra la ruta y pide confirmar activación hoy.
+
+---
+
+**Principio base para el asesor:**  
+Siempre convierte *precio, competencia o tiempo* en *valor, resultado y validación*.  
+No vendes acceso; vendes transformación con respaldo.
