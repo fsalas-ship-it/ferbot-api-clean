@@ -1,36 +1,27 @@
-# INTENTO: COMPETENCIA
-- Diferencia por rutas completas, comunidad, escuelas, certificados y enfoque en resultados del año.
+## Competencia: rutas vs. cursos sueltos (Ferney)
 
-EJEMPLOS REPLY:
-- "A diferencia de catálogos sueltos, acá tienes rutas completas, comunidad y certificados para crecer todo el año. ¿Activamos tu anual y empezamos?"
-- "No vas solo: rutas guiadas + comunidad + escuelas. Eso sostiene el avance anual. ¿Quieres activarlo ya?"
+- Diferencia clave: Platzi ofrece rutas guiadas de cero a perfil laboral + certificación verificable.
+- Competidores: suelen vender cursos aislados o certificados sin camino claro ni acompañamiento.
+- Con el plan anual: guía, práctica y validación en un solo lugar.
 
-WHY:
-- Diferenciación basada en impacto sostenido, no cantidad de cursos.
+### Cómo responder sin atacar
+- Reconoce alternativas, destaca resultados y validación.
+- Enfoca en “de no sé nada → listo para trabajar” con hábito de 10–15 min/día.
+- Evita pelear por precio: reencuadra a valor, resultado y respaldo.
 
-NEXT:
-- Activar anual y elegir escuela/meta.
-### integracion
-REPLY: A diferencia de otras plataformas, Platzi te ofrece rutas completas, comunidad activa y soporte todo el año.
-WHY: Marca diferencia de valor.
-NEXT: Invitar a conocer una escuela relevante.
+### Ejemplos
 
-### sondeo
-REPLY: ¿Qué te gustó de la otra plataforma y qué sientes que faltó?
-WHY: Descubre brecha de valor para contrastar con Platzi.
-NEXT: Conectar lo que falta con la propuesta de Platzi.
+Cliente: “En X es más barato.”
+REPLY: Es válido; un curso suelto es puntual. Aquí tienes ruta completa, práctica guiada y certificado verificable para empleo/ascenso. ¿Activamos tu plan anual?
+WHY: Reencuadra precio → resultado y validación.
+NEXT: Presenta ruta según su meta y confirma activación.
 
-### rebatir
-REPLY: Entiendo, otras enseñan temas puntuales; Platzi te acompaña un año con rutas integrales y comunidad en vivo.
-WHY: Transforma comparación en ventaja propia.
-NEXT: Guiar a probar ruta anual adaptada a su meta.
+Cliente: “En Y dicen que certifican más rápido.”
+REPLY: Velocidad sin ruta puede dejar vacíos. Aquí avanzas ágil, pero con camino claro y certificación que refleja dominio. ¿Te activo el anual y empezamos hoy?
+WHY: Prioriza dominio con evidencia, no solo rapidez.
+NEXT: Muestra primer hito; confirma plan.
 
-### pre_cierre
-REPLY: Lo importante no es solo aprender, sino avanzar con guía y constancia. Ahí Platzi marca la diferencia.
-WHY: Reafirma ventaja y transición a cierre.
-NEXT: Preparar cierre resaltando comunidad y soporte.
-
-### cierre
-REPLY: Vamos con el plan anual, así garantizas acompañamiento real y resultados sostenibles.
-WHY: Cierra contrastando beneficio de largo plazo.
-NEXT: Confirmar suscripción anual.
+Cliente: “¿Y qué pasa si no me gusta?”
+REPLY: Por eso el anual te da acceso total: pruebas, ajustas la ruta y sigues avanzando con certificado. ¿Lo activamos y empezamos por tu objetivo principal?
+WHY: Reduce riesgo percibido; flexibilidad con dirección.
+NEXT: Define objetivo, ruta y primer bloque diario; confirma activación.
