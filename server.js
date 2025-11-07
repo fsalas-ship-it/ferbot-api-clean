@@ -66,9 +66,21 @@ function inferIntent(q = "") {
   if (/(cert|certificado|certificacion|certificación)/.test(s)) return "cert";
   if (/(coursera|udemy|alura|competenc|otra plataforma)/.test(s)) return "competencia";
   if (/(pitch|qué es platzi|que es platzi|platzi)/.test(s)) return "pitch";
+  if (/(empleo|trabajo|vacante|contratar|contratación)/.test(s)) return "empleo";
   return "_default";
 }
 function escapeHtml(s=""){return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]))}
+
+// Guardas duras post-generación
+function violatesHardRules(text=""){
+  const banned = /\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/i;
+  return banned.test(text);
+}
+function sanitizeReply(text=""){
+  let t = clampReplyToWhatsApp(text, 220);
+  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/gi, "").replace(/\s+/g," ").trim();
+  return t;
+}
 
 // Stats helpers
 function ensureStatEntry(stats, intent, stage, text) {
@@ -122,23 +134,39 @@ function pickVariant(intent, stage, name) {
 
 // Trainer cache
 let TRAINER_IDENTITY = "";
-let TRAINER_SNIPPETS = "";
+let TRAINER_SNIPPETS = ""; // no se usa directo; ahora seleccionamos por intent
 async function loadTrainerIdentity() {
   try {
     TRAINER_IDENTITY = (await fs.readFile(TRAINER_TXT, "utf8")).trim();
   } catch { TRAINER_IDENTITY = ""; }
+}
 
+// Knowledge por intent (para bajar latencia y subir pertinencia)
+function pickKnowledgeByIntent(intent) {
+  const map = {
+    "precio": ["precio.md", "competencia.md", "default.md"],
+    "tiempo": ["tiempo.md", "default.md"],
+    "cert":   ["cert.md", "default.md"],
+    "competencia": ["competencia.md", "default.md"],
+    "pitch":  ["pitch.md", "default.md"],
+    "empleo": ["empleo.md", "default.md"],
+    "_default": ["default.md"]
+  };
+  return map[intent] || map["_default"];
+}
+async function buildKnowledgeSnippet(intent){
   try {
     const files = await fs.readdir(TRAINER_KNOW);
-    const texts = [];
+    const wanted = new Set(pickKnowledgeByIntent(intent));
+    const buf = [];
     for (const f of files) {
       if (!/\.md$|\.txt$/i.test(f)) continue;
-      const p = path.join(TRAINER_KNOW, f);
-      const t = (await fs.readFile(p, "utf8")).trim();
-      if (t) texts.push(`# ${f}\n${t}`);
+      if (!wanted.has(f)) continue;
+      const t = (await fs.readFile(path.join(TRAINER_KNOW, f), "utf8")).trim();
+      if (t) buf.push(`# ${f}\n${t}`);
     }
-    TRAINER_SNIPPETS = texts.join("\n\n---\n\n").slice(0, 12000);
-  } catch { TRAINER_SNIPPETS = ""; }
+    return buf.join("\n\n---\n\n").slice(0, 8000); // recorte sano
+  } catch { return ""; }
 }
 
 // ============== HEALTH =====================
@@ -155,7 +183,19 @@ app.get("/health", (_req, res) => {
 // ============== ADMIN ======================
 app.get("/admin/reloadTrainer", async (_req, res) => {
   await loadTrainerIdentity();
-  res.json({ ok: true, identity_len: TRAINER_IDENTITY.length, knowledge_len: TRAINER_SNIPPETS.length });
+  // medimos tamaños efectivos
+  let identity_len = (TRAINER_IDENTITY || "").length;
+  // knowledge_len ahora es dinámico por intent; mostramos tamaño total de archivos para referencia
+  let total_knowledge_len = 0;
+  try {
+    const files = await fs.readdir(TRAINER_KNOW);
+    for (const f of files) {
+      if (!/\.md$|\.txt$/i.test(f)) continue;
+      const t = (await fs.readFile(path.join(TRAINER_KNOW, f), "utf8"));
+      total_knowledge_len += t.length;
+    }
+  } catch { total_knowledge_len = 0; }
+  res.json({ ok: true, identity_len, knowledge_len: total_knowledge_len });
 });
 
 // ============== OFFLINE ASSIST =============
@@ -191,24 +231,23 @@ app.post("/assist_openai", async (req, res) => {
       return res.status(400).json({ ok:false, error:"missing_openai_api_key" });
     }
     const model = process.env.OPENAI_MODEL || "gpt-5";
-    const system = [
+    const rules = [
       "Eres un asesor comercial de Platzi (Colombia).",
       "Respondes corto (≤220c, 1–2 frases), sin ofrecer llamadas ni enviar material.",
       "Vendes suscripción ANUAL; conecta características→beneficio→beneficio de vida."
     ].join("\n");
     const user = `Cliente:${name}\nStage:${stage}\nIntent:${intent}\nMensaje:${question}\nEntrega solo el mensaje final.`;
 
-    // IMPORTANTE: sin temperatura ni max_tokens (algunos modelos no lo soportan)
     const r = await openai.chat.completions.create({
       model,
       messages: [
-        { role:"system", content: system },
+        { role:"system", content: rules },
         { role:"user", content: user }
       ]
     });
 
     const raw = r?.choices?.[0]?.message?.content?.trim() || `Hola ${name}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`;
-    const reply = clampReplyToWhatsApp(raw);
+    let reply = sanitizeReply(raw);
     await trackShown(intent, stage, reply);
     res.json({
       ok: true,
@@ -223,27 +262,26 @@ app.post("/assist_openai", async (req, res) => {
 // ============== TRAINER (REPLY/WHY/NEXT) ===
 function fallbackWhy(stage, intent) {
   const map = {
-    sondeo:     "Valido su meta y pido foco para proponer ruta anual.",
-    rebatir:    "Convierto objeción en valor: flexibilidad + hábito anual.",
-    pre_cierre: "Reafirmo valor y quito fricción para decidir hoy.",
-    cierre:     "Propongo acción concreta y amable al plan anual.",
-    integracion:"Refuerzo decisión y hábitos diarios breves."
+    sondeo:     "Generar claridad sin fricción para orientar la ruta.",
+    rebatir:    "Convertir objeción en valor: plan anual + hábito real.",
+    pre_cierre: "Quitar fricción y facilitar decisión hoy.",
+    cierre:     "Confirmar activación del plan anual de forma amable.",
+    integracion:"Afirmar solución y abrir conversación con sintonía."
   };
   return map[stage] || `Guío por valor y CTA (${intent}/${stage}).`;
 }
 function fallbackNext(stage) {
   const map = {
-    sondeo:     "Pedir objetivo anual y proponer primera ruta.",
-    rebatir:    "Ofrecer plan anual y fijar bloque diario 10–15 min.",
-    pre_cierre: "Resolver última duda y confirmar activación anual.",
-    cierre:     "Enviar link y confirmar activación del plan anual.",
-    integracion:"Definir horario diario y seguimiento inicial."
+    sondeo:     "Hacer una sola pregunta para orientar la ruta.",
+    rebatir:    "Reencuadrar y pedir confirmación simple.",
+    pre_cierre: "Ofrecer decisión A/B y confirmar.",
+    cierre:     "Confirmar activación hoy.",
+    integracion:"Invitar a que la persona comparta y mantener ritmo."
   };
   return map[stage] || "Cerrar con CTA simple al plan anual.";
 }
 
 function parseReplyWhyNext(content){
-  // Tolerante a formatos variados
   const mReply = content.match(/REPLY:\s*([\s\S]*?)(?:\n+WHY:|\n+NEXT:|$)/i);
   const mWhy   = content.match(/WHY:\s*(.*?)(?:\n+NEXT:|$)/i);
   const mNext  = content.match(/NEXT:\s*(.*)$/i);
@@ -264,29 +302,37 @@ app.post("/assist_trainer", async (req, res) => {
     }
     const model = process.env.OPENAI_MODEL || "gpt-5";
 
+    // Reglas duras y estilo Ferney
     const rules = [
-      "Eres FerBot (Platzi, Colombia). Tono amable, dinámico, con energía.",
-      "WhatsApp: ≤220c, 1–2 frases. Sin llamadas ni 'te envío material'.",
-      "Vendes suscripción ANUAL; conecta características→beneficio→beneficio de vida.",
-      "FORMATO ESTRICTO (3 líneas):",
+      "Eres FerBot (Platzi, Colombia). Voz: Ferney (humano, directo, cálido).",
+      "WhatsApp: 1–2 frases, ≤220 caracteres. Nada de llamadas, envíos o links.",
+      "Vendes plan ANUAL; conecta característica→beneficio→beneficio de vida.",
+      "USA SOLO lo que el cliente dijo (objetivo, área, certificación, competencia).",
+      "NO introduzcas temas no mencionados (ej: tiempo o precio) a menos que el cliente los traiga.",
+      "Integración: afirmar solución y abrir conversación (sin sondeo duro ni pre-cierre).",
+      "Formato ESTRICTO (3 líneas):",
       "REPLY: <mensaje listo WhatsApp>",
-      "WHY: <por qué breve y útil para el asesor>",
-      "NEXT: <próximo paso de venta anual para el asesor>"
+      "WHY: <principio de venta/enseñanza breve>",
+      "NEXT: <siguiente paso comercial amable>",
+      "Varía redacción entre consultas; evita repetir frases previas."
     ].join("\n");
+
+    const knowledge = await buildKnowledgeSnippet(intent);
 
     const system = [
       TRAINER_IDENTITY || "",
       rules,
-      TRAINER_SNIPPETS ? `Conocimiento adicional:\n${TRAINER_SNIPPETS}` : ""
+      knowledge ? `Conocimiento adicional (relevante al intent):\n${knowledge}` : ""
     ].filter(Boolean).join("\n\n");
 
     const user = [
       `Nombre del cliente: ${safeName}`,
       `Stage: ${stage}`,
       `Intent: ${intent}`,
-      context ? `Contexto: ${context}` : "",
+      context ? `Contexto adicional: ${context}` : "",
+      "Extrae primero la necesidad EXACTA del mensaje del cliente (sin inventar):",
       `Mensaje del cliente: ${question}`,
-      "Recuerda el formato REPLY/WHY/NEXT estrictamente."
+      "Luego entrega REPLY/WHY/NEXT. Mantén las reglas duras."
     ].filter(Boolean).join("\n");
 
     const r = await openai.chat.completions.create({
@@ -295,17 +341,18 @@ app.post("/assist_trainer", async (req, res) => {
         { role: "system", content: system },
         { role: "user", content: user }
       ]
-      // Sin temperature ni max_tokens forzados (para evitar errores de modelo)
     });
 
     const content = r?.choices?.[0]?.message?.content || "";
     let { reply, why, next } = parseReplyWhyNext(content);
 
     if (!reply) {
-      // Sin formato → toma todo, clampa y genera WHY/NEXT de fallback
       reply = clampReplyToWhatsApp(content || `Hola ${safeName}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`);
     }
-    reply = clampReplyToWhatsApp(reply);
+    reply = sanitizeReply(reply);
+    if (violatesHardRules(reply)) {
+      reply = `Entendido, ${safeName}; hay una ruta clara para tu objetivo y puedes empezar hoy mismo.`;
+    }
     if (!why)  why  = fallbackWhy(stage, intent);
     if (!next) next = fallbackNext(stage);
 
@@ -325,7 +372,6 @@ app.post("/assist_trainer", async (req, res) => {
       }
     });
   } catch (err) {
-    // Devolver detalle para depurar sin abrir logs
     res.status(500).json({ ok:false, error:"assist_trainer_failed", detail: stringifyErr(err) });
   }
 });
@@ -447,7 +493,6 @@ app.get("/panel", (_req,res)=> res.redirect("/panel.html"));
 // ============== INICIO =====================
 function stringifyErr(err){
   try {
-    // SDK OpenAI a veces trae .error con .message
     if (err && typeof err === "object") {
       if (err.error) return JSON.stringify(err, null, 2);
       if (err.response?.data) return JSON.stringify(err.response.data, null, 2);
@@ -466,3 +511,4 @@ function stringifyErr(err){
     console.log(`🔥 FerBot API escuchando en http://localhost:${PORT}`);
   });
 })();
+
