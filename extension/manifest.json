@@ -1,17 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "FerBot",
-  "description": "Asistente comercial (FerBot) para Hilos. FAB arrastrable + panel con countdown, sentimiento y rating 1-vez.",
-  "version": "1.4.1",
-  "icons": {},
-  "permissions": [],
-  "host_permissions": [
-    "https://ferbot-api-clean.onrender.com/*"
-  ],
+  "name": "FerBot – Hilos Helper",
+  "version": "1.0.0",
+  "description": "Atajos de venta para Hilos (FerBot): respuestas del bot + botón de enlace de pago.",
+  "permissions": ["storage", "clipboardWrite"],
+  "icons": {
+    "16": "icons/ferbot-16.png",
+    "48": "icons/ferbot-48.png",
+    "128": "icons/ferbot-128.png"
+  },
   "content_scripts": [
     {
-      "matches": ["https://app.hilos.io/*"],
-      "js": ["contentScript.js"],
+      "matches": ["<all_urls>"],
+      "js": [
+        "contentScript.js",
+        "paymentToolbar.js"
+      ],
       "run_at": "document_idle"
     }
   ]
