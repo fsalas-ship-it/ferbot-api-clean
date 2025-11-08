@@ -1,4 +1,4 @@
-// server.js — FerBot API (dinámico, variación, estilo Ferney, guardrails, sin 500)
+// server.js — FerBot API (dinámico, variación, estilo Ferney, catálogo permitido, guardrails, sin 500)
 // -----------------------------------------------------------------------------------
 require("dotenv").config();
 
@@ -24,9 +24,9 @@ const VARIANTS_PATH = path.join(DATA_DIR, "variants.json");
 const STATS_PATH    = path.join(DATA_DIR, "stats.json");
 const TRAINER_TXT   = path.join(DATA_DIR, "trainer_identity.txt");
 const TRAINER_KNOW  = path.join(DATA_DIR, "trainer_knowledge");
-const CATALOG_MD    = path.join(TRAINER_KNOW, "catalog_topics.md");
+const CATALOG_JSON  = path.join(TRAINER_KNOW, "catalog_topics.json");
 
-// Asegurar estructura
+// Asegurar estructura mínima
 for (const p of [DATA_DIR, TRAINER_KNOW]) {
   if (!fssync.existsSync(p)) fssync.mkdirSync(p, { recursive: true });
 }
@@ -34,7 +34,6 @@ if (!fssync.existsSync(MEMORY_PATH))   fssync.writeFileSync(MEMORY_PATH, JSON.st
 if (!fssync.existsSync(VARIANTS_PATH)) fssync.writeFileSync(VARIANTS_PATH, JSON.stringify({ byKey: {} }, null, 2));
 if (!fssync.existsSync(STATS_PATH))    fssync.writeFileSync(STATS_PATH, JSON.stringify({ byKey: {} }, null, 2));
 if (!fssync.existsSync(TRAINER_TXT))   fssync.writeFileSync(TRAINER_TXT, "");
-if (!fssync.existsSync(CATALOG_MD))    fssync.writeFileSync(CATALOG_MD, "# Catálogo de temas disponibles\n- Inglés general aplicado al trabajo\n- Terminología y vocabulario para áreas de salud (módulos)\n- Rutas de inglés por niveles (A1–B2) con enfoque profesional\n- Marketing + IA (rutas y proyectos guiados)\n- Data + Python (rutas y certificación verificable)\n");
 
 // ============== HELPERS ====================
 async function readJsonSafe(file, fallback) {
@@ -66,24 +65,25 @@ function inferIntent(q = "") {
 
 // Guardrails post-generación
 function violatesHardRules(text=""){
+  // prohibimos prometer "te envío", "te llamo", "link", "material"
   const banned = /\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/i;
   return banned.test(text);
 }
 function sanitizeReply(text=""){
   let t = clampReplyToWhatsApp(text, 220);
-  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/gi, "").replace(/\s+/g," ").trim();
+  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/gi, "")
+       .replace(/\s+/g," ").trim();
   return t;
 }
 
 // Emojis sobrios (0–1 por respuesta)
 const EMO_POS = ["💚","✨","🚀","✅","🙌"];
 const EMO_NEU = ["🙂","👌","🧭"];
-const EMO_NEG = ["👍"]; // para validar objeción sin cargar
+const EMO_NEG = ["👍"];
 function addLightEmoji(reply, sentiment="neu") {
   const pool = sentiment==="pos"?EMO_POS : sentiment==="neg"?EMO_NEG : EMO_NEU;
   if (Math.random() < 0.55) return reply; // 45% chance de agregar
   const e = pool[Math.floor(Math.random()*pool.length)];
-  // 50% al inicio, 50% al final
   return Math.random()<0.5 ? `${e} ${reply}` : `${reply} ${e}`;
 }
 
@@ -101,7 +101,7 @@ function dedupeAndPick(candidates=[], seed=Date.now()){
   return uniq[idx];
 }
 
-// Stats helpers
+// Stats
 function ensureStatEntry(stats, intent, stage, text) {
   const key = `${intent}::${stage}`;
   if (!stats.byKey[key]) stats.byKey[key] = {};
@@ -156,29 +156,71 @@ async function loadTrainerIdentity() {
   catch { TRAINER_IDENTITY = ""; }
 }
 
-// Catálogo de temas permitidos (para no prometer “programas” inexistentes)
-let SAFE_TOPICS = [];
-async function loadSafeTopics() {
+// ========== Catálogo (desde JSON) ==========
+let CATALOG = null;
+let SAFE_PHRASES = []; // strings planas para validar
+async function loadCatalogJson() {
   try {
-    const raw = await fs.readFile(CATALOG_MD, "utf8");
-    SAFE_TOPICS = (raw.match(/^- (.+)$/gm) || []).map(l => l.replace(/^- /,'').trim().toLowerCase());
-  } catch { SAFE_TOPICS = []; }
+    const raw = await fs.readFile(CATALOG_JSON, "utf8");
+    CATALOG = JSON.parse(raw);
+  } catch {
+    CATALOG = null;
+  }
+  SAFE_PHRASES = [];
+  try {
+    const c = CATALOG?.catalogo_temas_permitidos || {};
+    const allArrays = [
+      ...(c.transformacion_que_vendemos || []),
+      ...(c.caracteristicas_producto || []),
+      ...(c.beneficios_producto || []),
+      ...(c.beneficios_vida || []),
+    ];
+    SAFE_PHRASES = allArrays.map(s => String(s || "").toLowerCase().trim()).filter(Boolean);
+  } catch { SAFE_PHRASES = []; }
 }
+
 function softenIfUncataloged(reply="") {
+  // Si el modelo promete “programa de X” y X no está en frases seguras → reescribe
   let out = reply;
-  const m = out.match(/\bprograma (?:de|en) ([a-záéíóúñ0-9\s\-]+)\b/i);
+  const m = out.match(/\bprograma (?:de|en) ([a-záéíóúñ0-9\s\-\+]+)\b/i);
   if (m) {
     const topic = m[1].trim().toLowerCase();
-    const isSafe = SAFE_TOPICS.some(t => topic.includes(t) || t.includes(topic));
+    const isSafe = SAFE_PHRASES.some(t => topic.includes(t) || t.includes(topic));
     if (!isSafe) {
-      out = out.replace(/\bprograma (?:de|en) [a-záéíóúñ0-9\s\-]+\b/gi, "rutas aplicadas y módulos enfocados");
-      out = out.replace(/\s+/g, " ").trim();
+      out = out.replace(/\bprograma (?:de|en) [a-záéíóúñ0-9\s\-\+]+\b/gi, "rutas aplicadas y módulos enfocados")
+               .replace(/\s+/g, " ").trim();
     }
   }
   return out;
 }
 
-// Knowledge por intent
+function buildCatalogForPrompt() {
+  const c = CATALOG?.catalogo_temas_permitidos;
+  if (!c) return "";
+  const lines = [];
+  lines.push("Claims permitidos (guía de voz y contenido):");
+  if (c.transformacion_que_vendemos?.length) {
+    lines.push("- Transformación:", ...c.transformacion_que_vendemos.map(x => `  • ${x}`));
+  }
+  if (c.caracteristicas_producto?.length) {
+    lines.push("- Características:", ...c.caracteristicas_producto.map(x => `  • ${x}`));
+  }
+  if (c.beneficios_producto?.length) {
+    lines.push("- Beneficios de producto:", ...c.beneficios_producto.map(x => `  • ${x}`));
+  }
+  if (c.beneficios_vida?.length) {
+    lines.push("- Beneficios de vida:", ...c.beneficios_vida.map(x => `  • ${x}`));
+  }
+  if (c.guion_base_ferbot?.estructura?.length) {
+    lines.push("- Estructura FerBot:", ...c.guion_base_ferbot.estructura.map(x => `  • ${x}`));
+  }
+  if (c.guion_base_ferbot?.ejemplo) {
+    lines.push(`- Ejemplo FerBot: "${c.guion_base_ferbot.ejemplo}"`);
+  }
+  return lines.join("\n");
+}
+
+// Knowledge por intent (para prompt compacto y rápido)
 function pickKnowledgeByIntent(intent) {
   const map = {
     "precio": ["precio.md", "competencia.md", "default.md"],
@@ -216,20 +258,26 @@ app.get("/health", (_req, res) => {
     model_env: process.env.OPENAI_MODEL || "gpt-5"
   });
 });
+
 app.get("/admin/reloadTrainer", async (_req, res) => {
   await loadTrainerIdentity();
-  await loadSafeTopics();
-  let identity_len = (TRAINER_IDENTITY || "").length;
+  await loadCatalogJson();
+  // medir knowledge total
   let total_knowledge_len = 0;
   try {
     const files = await fs.readdir(TRAINER_KNOW);
     for (const f of files) {
-      if (!/\.md$|\.txt$/i.test(f)) continue;
+      if (!/\.md$|\.txt$|\.json$/i.test(f)) continue;
       const t = (await fs.readFile(path.join(TRAINER_KNOW, f), "utf8"));
       total_knowledge_len += t.length;
     }
   } catch { total_knowledge_len = 0; }
-  res.json({ ok: true, identity_len, knowledge_len: total_knowledge_len, topics_len: SAFE_TOPICS.length });
+  res.json({
+    ok: true,
+    identity_len: (TRAINER_IDENTITY || "").length,
+    knowledge_len: total_knowledge_len,
+    topics_len: SAFE_PHRASES.length
+  });
 });
 
 // ============== OFFLINE ASSIST =============
@@ -256,7 +304,7 @@ async function callOpenAIWithFallback(body) {
   for (const model of models) {
     try {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 20000); // 20s
+      const t = setTimeout(() => controller.abort(), 20000); // 20s timeout
       const r = await openai.chat.completions.create({ model, ...body }, { signal: controller.signal });
       clearTimeout(t);
       const content = r?.choices?.[0]?.message?.content?.trim();
@@ -290,12 +338,7 @@ function fallbackNext(stage) {
 }
 
 function parseMultiCandidates(text=""){
-  // Esperamos un bloque con 5 variantes formateadas:
-  // VARIANTS:
-  // 1) REPLY: ...
-  //    WHY: ...
-  //    NEXT: ...
-  // 2) REPLY: ...
+  // Esperamos un bloque con 5 variantes formateadas: 1) REPLY/WHY/NEXT ...
   const blocks = [];
   const lines = text.split("\n");
   let cur = { reply:"", why:"", next:"" }, inBlock = false;
@@ -310,7 +353,6 @@ function parseMultiCandidates(text=""){
     if (mN) { cur.next=(mN[1]||"").trim(); continue; }
   }
   if (inBlock) blocks.push(cur);
-  // Fallback: si no vino en formato de lista, intenta single
   if (!blocks.length) {
     const single = {
       reply: (text.match(/REPLY:\s*([\s\S]*?)(?:\n+WHY:|\n+NEXT:|$)/i)?.[1] || "").trim(),
@@ -336,26 +378,28 @@ async function genTrainerReplyDynamic({ question, customerName, stage, intentIn,
   const intent = intentIn || inferIntent(question);
   const knowledge = await buildKnowledgeSnippet(intent);
   const sentiment = guessSentimentByText(question);
+  const catalogBlock = buildCatalogForPrompt();
 
-  // Sistema + reglas (variedad + estilo + técnica)
+  // Reglas / estilo Ferney
   const rules = [
     "Eres FerBot (Platzi, Colombia). Voz: Ferney (humano, directo, cálido).",
     "WhatsApp: 1–2 frases, ≤220 caracteres. Nada de llamadas, envíos o links.",
     "Vendes plan ANUAL; conecta característica→beneficio→beneficio de vida.",
     "Usa SOLO lo que el cliente dijo (objetivo, área, certificación, competencia). No inventes temas.",
     "Integración: sintonía y apertura (no pre-cierre).",
-    "Respuestas con técnica comercial moderna: reencuadre, prueba social sutil (sin inventar), CTA amable, opción A/B si aplica.",
-    "Incluye variación de wording: cambia verbos, orden, y micro-CTAs para evitar respuestas idénticas.",
+    "Técnica comercial: reencuadre, CTA amable, A/B close solo si aplica.",
+    "Incluye variación de wording: cambia verbos, orden y micro-CTAs.",
     "Formato ESTRICTO por variante: REPLY/WHY/NEXT."
   ].join("\n");
 
   const system = [
     TRAINER_IDENTITY || "",
     rules,
-    knowledge ? `Conocimiento relevante:\n${knowledge}` : ""
+    knowledge ? `Conocimiento relevante:\n${knowledge}` : "",
+    catalogBlock ? `Contexto comercial (permitido):\n${catalogBlock}` : ""
   ].filter(Boolean).join("\n\n");
 
-  // Pedimos 5 variantes para escoger aleatoriamente
+  // Pedimos 5 variantes
   const user = [
     `Nombre del cliente: ${safeName}`,
     `Stage: ${stage}`,
@@ -382,7 +426,6 @@ async function genTrainerReplyDynamic({ question, customerName, stage, intentIn,
     ]
   });
 
-  // Parsear las 5 y elegir 1 al azar (sin repetir)
   const variants = parseMultiCandidates(content);
   let reply = dedupeAndPick(variants.map(v=>v.reply), Date.now());
   let why   = dedupeAndPick(variants.map(v=>v.why),   Date.now()+7);
@@ -422,7 +465,6 @@ app.post("/assist_trainer", async (req, res) => {
     try {
       const { reply, why, next, modelUsed, intent, stage } = await genTrainerReplyDynamic(payload);
       if (violatesHardRules(reply)) {
-        // Nunca devolver cosas prohibidas
         const safeName = payload.customerName || "Cliente";
         const r2 = `Te entiendo, ${safeName}; hay una ruta clara y podemos empezar hoy mismo. ¿Te muestro cómo?`;
         await trackShown(intent, stage, r2);
@@ -517,8 +559,8 @@ app.get("/admin/dashboard", async (_req, res) => {
       </tr>
     `).join("");
 
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end(`<!doctype html>
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.end(`<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"/>
 <title>FerBot · Dashboard</title>
@@ -579,7 +621,7 @@ app.get("/panel", (_req,res)=> res.redirect("/panel.html"));
 (async () => {
   await loadVariants();
   await loadTrainerIdentity();
-  await loadSafeTopics();
+  await loadCatalogJson();
   console.log("➡️  OpenAI habilitado:", !!process.env.OPENAI_API_KEY, "| Modelo preferido:", process.env.OPENAI_MODEL || "gpt-5");
   const PORT = Number(process.env.PORT || 3000);
   app.listen(PORT, () => console.log(`🔥 FerBot API escuchando en http://localhost:${PORT}`));
