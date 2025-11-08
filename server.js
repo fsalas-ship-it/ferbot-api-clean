@@ -1,4 +1,4 @@
-// server.js — FerBot API (completo con catálogo: offline, openai, trainer, dashboard, CORS, panel)
+// server.js — FerBot API (catálogo + precios + link de pago en intent: precio)
 // -----------------------------------------------------------------------------------
 require("dotenv").config();
 
@@ -30,8 +30,8 @@ const VARIANTS_PATH = path.join(DATA_DIR, "variants.json");
 const STATS_PATH    = path.join(DATA_DIR, "stats.json");
 const TRAINER_TXT   = path.join(DATA_DIR, "trainer_identity.txt");
 const TRAINER_KNOW  = path.join(DATA_DIR, "trainer_knowledge");
-// Catálogo
 const CATALOG_PATH  = path.join(DATA_DIR, "catalog.json");
+const PRICES_PATH   = path.join(DATA_DIR, "prices.json");
 
 // Asegurar estructura
 for (const p of [DATA_DIR, TRAINER_KNOW]) {
@@ -42,6 +42,7 @@ if (!fssync.existsSync(VARIANTS_PATH)) fssync.writeFileSync(VARIANTS_PATH, JSON.
 if (!fssync.existsSync(STATS_PATH))    fssync.writeFileSync(STATS_PATH, JSON.stringify({ byKey: {} }, null, 2));
 if (!fssync.existsSync(TRAINER_TXT))   fssync.writeFileSync(TRAINER_TXT, "");
 if (!fssync.existsSync(CATALOG_PATH))  fssync.writeFileSync(CATALOG_PATH, JSON.stringify({ areas: [], platform: {} }, null, 2));
+if (!fssync.existsSync(PRICES_PATH))   fssync.writeFileSync(PRICES_PATH, JSON.stringify({ currencies: {}, promo: {} }, null, 2));
 
 // ============== HELPERS ====================
 async function readJsonSafe(file, fallback) {
@@ -76,16 +77,16 @@ function escapeHtml(s=""){return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&l
 
 // Guardas duras post-generación
 function violatesHardRules(text=""){
-  const banned = /\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/i;
+  const banned = /\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|material(es)?)\b/i;
   return banned.test(text);
 }
 function sanitizeReply(text=""){
   let t = clampReplyToWhatsApp(text, 220);
-  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/gi, "").replace(/\s+/g," ").trim();
+  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|material(es)?)\b/gi, "").replace(/\s+/g," ").trim();
   return t;
 }
 
-// ===== CATALOGO: carga segura + matching por keywords =====
+// ===== CATALOGO =====
 async function readCatalogSafe() {
   try {
     const raw = await fs.readFile(CATALOG_PATH, "utf8");
@@ -107,6 +108,53 @@ function bestAreaMatch(catalog, text="") {
     if (sc > score) { score = sc; best = area; }
   }
   return { area: best, score };
+}
+
+// ===== PRECIOS =====
+async function readPricesSafe() {
+  try {
+    const raw = await fs.readFile(PRICES_PATH, "utf8");
+    const json = JSON.parse(raw);
+    return json || { currencies: {}, promo: {} };
+  } catch {
+    return { currencies: {}, promo: {} };
+  }
+}
+// Detección básica de moneda por texto (palabras clave); fallback COP
+function detectCurrencyByText(text="") {
+  const s = (text||"").toLowerCase();
+  if (/\b(m[eé]xico|mxn|cdmx|mex)\b/.test(s)) return "MXN";
+  if (/\b(colombia|cop|bog[oó]ta|medell[ií]n)\b/.test(s)) return "COP";
+  if (/\b(chile|clp|santiago)\b/.test(s)) return "CLP";
+  if (/\b(per[uú]|pen|lima)\b/.test(s)) return "PEN";
+  if (/\b(uruguay|uyu|montevideo)\b/.test(s)) return "UYU";
+  if (/\b(guatemala|gtq)\b/.test(s)) return "GTQ";
+  if (/\b(bolivia|bob|la paz|santa cruz)\b/.test(s)) return "BOB";
+  if (/\b(paraguay|pyg|asunci[oó]n)\b/.test(s)) return "PYG";
+  if (/\b(rep[úu]blica dominicana|rd|dop|santo domingo)\b/.test(s)) return "DOP";
+  if (/\b(costa rica|crc|san jos[eé])\b/.test(s)) return "CRC";
+  if (/\b(argentina|ars|buenos aires)\b/.test(s)) return "ARS";
+  if (/\b(usa|eeuu|estados unidos|usd|miami|ny|new york)\b/.test(s)) return "USD";
+  if (/\b(europa|eur|euros|espa[ñn]a|madrid|barcelona)\b/.test(s)) return "EUR";
+  return "COP"; // default
+}
+// Formateo rápido con símbolo
+function money(fmtCurrency, n) {
+  const symbols = { MXN:"$","COP":"$","CLP":"$","PEN":"S/","UYU":"$","GTQ":"Q","BOB":"Bs","PYG":"₲","DOP":"RD$","CRC":"₡","ARS":"$","USD":"$","EUR":"€" };
+  const sym = symbols[fmtCurrency] || "";
+  return `${sym}${n.toLocaleString("es-CO")}`;
+}
+// Construir líneas de precio (solo Expert y Expert Duo) según lista o promo
+function buildPriceLines(prices, currency, usePromo=true) {
+  const cur = prices.currencies[currency];
+  if (!cur) return [];
+  const src = usePromo ? prices.promo[currency] : cur;
+  if (!src) return [];
+  // Solo Expert y Duo (no Grupos)
+  const out = [];
+  if (src.Expert != null) out.push({ plan: "Expert", value: src.Expert });
+  if (src.Duo    != null) out.push({ plan: "Expert Duo", value: src.Duo });
+  return out.map(x => `${x.plan}: ${money(currency, x.value)}`);
 }
 
 // Stats helpers
@@ -149,7 +197,7 @@ function pickVariant(intent, stage, name) {
   const list = block?.variants || [];
   if (!list.length) {
     return `Hola ${name}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`;
-    }
+  }
   let total = list.reduce((acc, v) => acc + (Number(v.weight || 1)), 0);
   let r = Math.random() * total;
   for (const v of list) {
@@ -167,7 +215,7 @@ async function loadTrainerIdentity() {
   } catch { TRAINER_IDENTITY = ""; }
 }
 
-// Knowledge por intent (para bajar latencia y subir pertinencia)
+// Knowledge por intent
 function pickKnowledgeByIntent(intent) {
   const map = {
     "precio": ["precio.md", "competencia.md", "default.md"],
@@ -206,10 +254,16 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ===== GET /catalog (ver contenido del catálogo) =====
+// ===== GET /catalog =====
 app.get("/catalog", async (_req, res) => {
   const catalog = await readCatalogSafe();
   res.json({ ok:true, ...catalog });
+});
+
+// ===== GET /prices =====
+app.get("/prices", async (_req, res) => {
+  const prices = await readPricesSafe();
+  res.json({ ok:true, ...prices });
 });
 
 // ============== ADMIN ======================
@@ -231,11 +285,16 @@ app.get("/admin/reloadTrainer", async (_req, res) => {
   const catalog = await readCatalogSafe();
   const catalog_len = (catalog.areas || []).length;
 
+  // medir precios
+  const prices = await readPricesSafe();
+  const currencies_len = Object.keys(prices.currencies || {}).length;
+
   res.json({
     ok: true,
     identity_len: (TRAINER_IDENTITY || "").length,
     knowledge_len: total_knowledge_len,
-    catalog_len
+    catalog_len,
+    currencies_len
   });
 });
 
@@ -346,7 +405,7 @@ app.post("/assist_trainer", async (req, res) => {
     // Reglas duras y estilo Ferney
     const rules = [
       "Eres FerBot (Platzi, Colombia). Voz: Ferney (humano, directo, cálido).",
-      "WhatsApp: 1–2 frases, ≤220 caracteres. Nada de llamadas, envíos o links.",
+      "WhatsApp: 1–2 frases, ≤220 caracteres. Nada de llamadas, envíos ni promesas sin base.",
       "Vendes plan ANUAL; conecta característica→beneficio→beneficio de vida.",
       "Usa SOLO lo que el cliente dijo (objetivo, área, certificación, competencia).",
       "NO introduzcas temas no mencionados (ej: tiempo o precio) a menos que el cliente los traiga.",
@@ -355,17 +414,16 @@ app.post("/assist_trainer", async (req, res) => {
       "REPLY: <mensaje listo WhatsApp>",
       "WHY: <principio de venta/enseñanza breve>",
       "NEXT: <siguiente paso comercial amable>",
-      "Varía redacción entre consultas; evita repetir frases previas."
+      "Varía redacción entre consultas; evita repetir frases previas.",
+      "Nunca menciones 'Grupos' en precios; prioriza Expert y Expert Duo."
     ];
 
-    // Conocimiento por intent
     const knowledge = await buildKnowledgeSnippet(intent);
 
-    // Catálogo → intento de match por keywords del texto del cliente
+    // Catálogo
     const catalog = await readCatalogSafe();
     const { area: matchedArea, score: matchScore } = bestAreaMatch(catalog, question);
 
-    // Texto seguro para el modelo (no promete nada fuera del catálogo)
     let catalogContext = "";
     if (matchedArea && matchScore > 0) {
       const route = (matchedArea.routes && matchedArea.routes[0]) || null;
@@ -380,11 +438,30 @@ app.post("/assist_trainer", async (req, res) => {
       ].filter(Boolean).join("\n");
     }
 
+    // Precios (para intent precio en cualquier etapa)
+    const prices = await readPricesSafe();
+    let priceContext = "";
+    if (intent === "precio") {
+      const curr = detectCurrencyByText(`${question} ${context}`);
+      const lines = buildPriceLines(prices, curr, true); // promo por defecto
+      if (lines.length) {
+        priceContext = [
+          `Moneda detectada: ${curr}`,
+          `Planes (solo personales):`,
+          ...lines.map(l => `- ${l}`),
+          `Link de pago: https://platzi.com/precios/`
+        ].join("\n");
+      } else {
+        priceContext = `No se hallaron precios para la moneda detectada; referencia única: https://platzi.com/precios/`;
+      }
+    }
+
     const system = [
       TRAINER_IDENTITY || "",
       rules.join("\n"),
       knowledge ? `Conocimiento relevante:\n${knowledge}` : "",
-      catalogContext ? `Catálogo (guía segura, NO inventes):\n${catalogContext}` : ""
+      catalogContext ? `Catálogo (guía segura, NO inventes):\n${catalogContext}` : "",
+      priceContext ? `Precios (mostrar si el cliente pidió precio):\n${priceContext}` : ""
     ].filter(Boolean).join("\n\n");
 
     const user = [
@@ -412,11 +489,21 @@ app.post("/assist_trainer", async (req, res) => {
       reply = clampReplyToWhatsApp(content || `Hola ${safeName}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`);
     }
     reply = sanitizeReply(reply);
+    // No permitir "Grupos" en precios
+    reply = reply.replace(/\bgrupos?\b/gi, "").replace(/\s{2,}/g, " ").trim();
+
     if (violatesHardRules(reply)) {
       reply = `Entendido, ${safeName}; hay una ruta clara para tu objetivo y puedes empezar hoy mismo.`;
     }
     if (!why)  why  = fallbackWhy(stage, intent);
     if (!next) next = fallbackNext(stage);
+
+    // Si el cliente preguntó por precio y no apareció el link, lo anexamos de forma corta
+    if (intent === "precio" && !/platzi\.com\/precios/i.test(reply)) {
+      const suffix = " Más opciones aquí: platzi.com/precios";
+      const joined = `${reply} ${suffix}`.trim();
+      reply = clampReplyToWhatsApp(joined, 220);
+    }
 
     await trackShown(intent, stage, reply);
 
@@ -573,4 +660,3 @@ function stringifyErr(err){
     console.log(`🔥 FerBot API escuchando en http://localhost:${PORT}`);
   });
 })();
-
