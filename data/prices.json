@@ -1,0 +1,32 @@
+{
+  "currencies": {
+    "MXN": { "Basic": 849, "Expert": 4990, "Duo": 6590, "Groups": 9990 },
+    "COP": { "Basic": 179000, "Expert": 999000, "Duo": 1499000, "Groups": 2199000 },
+    "CLP": { "Basic": 39000, "Expert": 219900, "Duo": 289900, "Groups": 459900 },
+    "PEN": { "Basic": 149, "Expert": 890, "Duo": 1190, "Groups": 1690 },
+    "UYU": { "Basic": 2149, "Expert": 11990, "Duo": 16990, "Groups": 24990 },
+    "GTQ": { "Basic": 289, "Expert": 1690, "Duo": 2290, "Groups": 3490 },
+    "BOB": { "Basic": 329, "Expert": 1790, "Duo": 2390, "Groups": 3690 },
+    "PYG": { "Basic": 359000, "Expert": 1990000, "Duo": 2490000, "Groups": 3990000 },
+    "DOP": { "Basic": 2790, "Expert": 14990, "Duo": 18990, "Groups": 30990 },
+    "CRC": { "Basic": 28900, "Expert": 159900, "Duo": 209900, "Groups": 314900 },
+    "ARS": { "Basic": 64900, "Expert": 359900, "Duo": 449900, "Groups": 699900 },
+    "USD": { "Basic": 49, "Expert": 249, "Duo": 329, "Groups": 499 },
+    "EUR": { "Basic": 59, "Expert": 299, "Duo": 399, "Groups": 599 }
+  },
+  "promo": {
+    "MXN": { "Basic": 849, "Expert": 4299, "Duo": 5599, "Groups": 8499 },
+    "COP": { "Basic": 179000, "Expert": 849999, "Duo": 1299000, "Groups": 1899000 },
+    "CLP": { "Basic": 39000, "Expert": 186999, "Duo": 245999, "Groups": 390999 },
+    "PEN": { "Basic": 149, "Expert": 799, "Duo": 999, "Groups": 1499 },
+    "UYU": { "Basic": 2149, "Expert": 10099, "Duo": 14499, "Groups": 21199 },
+    "GTQ": { "Basic": 289, "Expert": 1499, "Duo": 1999, "Groups": 2999 },
+    "BOB": { "Basic": 329, "Expert": 1499, "Duo": 1999, "Groups": 3199 },
+    "PYG": { "Basic": 359000, "Expert": 1699000, "Duo": 2119000, "Groups": 3399000 },
+    "DOP": { "Basic": 2790, "Expert": 12999, "Duo": 15999, "Groups": 26299 },
+    "CRC": { "Basic": 28900, "Expert": 135999, "Duo": 179999, "Groups": 269999 },
+    "ARS": { "Basic": 64900, "Expert": 299999, "Duo": 399999, "Groups": 599999 },
+    "USD": { "Basic": 49, "Expert": 209, "Duo": 299, "Groups": 449 },
+    "EUR": { "Basic": 59, "Expert": 249, "Duo": 339, "Groups": 499 }
+  }
+}
