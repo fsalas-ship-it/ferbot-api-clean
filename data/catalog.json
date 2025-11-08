@@ -1,63 +1,112 @@
 {
   "areas": [
     {
+      "id": "ia-marketing",
       "name": "Inteligencia Artificial + Marketing",
-      "keywords": ["ia", "inteligencia artificial", "marketing", "growth", "content", "copy", "ads", "performance"],
       "certification": true,
+      "micro_goal": "En 14 días tendrás un flujo de campaña automatizada con IA.",
       "routes": [
         {
-          "title": "Ruta de Marketing con IA",
+          "id": "ruta-ia-marketing",
+          "title": "Ruta de IA aplicada al Marketing",
           "courses": [
-            { "title": "Prompting Estratégico para Marketing" },
-            { "title": "Automatización de Contenidos con IA" },
-            { "title": "Análisis de Audiencias con IA" }
+            { "id": "prompting-marketing", "title": "Prompting aplicado a Marketing" },
+            { "id": "automatizacion-campanas-ia", "title": "Automatización de campañas con IA" },
+            { "id": "analitica-creativa", "title": "Analítica creativa para anuncios y contenidos" },
+            { "id": "growth-frameworks", "title": "Frameworks de Growth y experimentación" }
           ]
         }
-      ]
+      ],
+      "keywords": ["ia", "inteligencia artificial", "marketing", "growth", "ads", "contenido", "automatizacion"],
+      "cta": "Empieza el curso de Prompting aplicado a Marketing hoy."
     },
     {
-      "name": "Data & Analytics",
-      "keywords": ["data", "analitica", "analytics", "sql", "power bi", "excel", "tabla", "dashboard"],
+      "id": "data-analytics",
+      "name": "Data Analytics",
       "certification": true,
+      "micro_goal": "En 14 días crearás tu primer dashboard en Power BI.",
       "routes": [
         {
-          "title": "Ruta de Analítica de Datos",
+          "id": "ruta-data-analytics",
+          "title": "Ruta de Data Analytics",
           "courses": [
-            { "title": "Fundamentos de Datos y Métricas" },
-            { "title": "SQL desde Cero a Práctico" },
-            { "title": "Dashboards con Power BI" }
+            { "id": "fundamentos-datos", "title": "Fundamentos de Datos" },
+            { "id": "power-bi", "title": "Power BI: de cero a dashboard" },
+            { "id": "sql-basico", "title": "SQL básico para análisis" },
+            { "id": "excel-analitico", "title": "Excel para análisis y reportes" }
           ]
         }
-      ]
+      ],
+      "keywords": ["data", "datos", "analytics", "power bi", "excel", "sql", "dashboard"],
+      "cta": "Inicia Fundamentos de Datos ahora y avanza hacia tu certificación."
     },
     {
-      "name": "Backend & APIs",
-      "keywords": ["backend", "node", "api", "express", "servidor", "javascript", "desarrollo"],
-      "certification": true,
-      "routes": [
-        {
-          "title": "Ruta de Backend con JavaScript",
-          "courses": [
-            { "title": "JavaScript para Backend" },
-            { "title": "APIs con Node y Express" },
-            { "title": "Autenticación y Buenas Prácticas" }
-          ]
-        }
-      ]
-    },
-    {
+      "id": "ingles",
       "name": "Inglés Profesional",
-      "keywords": ["ingles", "inglés", "b1", "b2", "idioma", "trabajo global"],
       "certification": false,
+      "micro_goal": "Cada día 15 minutos para hablar inglés de trabajo en 2 semanas.",
       "routes": [
         {
-          "title": "Ruta de Inglés para el Trabajo",
+          "id": "ruta-ingles",
+          "title": "Ruta de Inglés Profesional",
           "courses": [
-            { "title": "Inglés Aplicado al Trabajo Diario" },
-            { "title": "Presentaciones y Reuniones en Inglés" }
+            { "id": "ingles-trabajo", "title": "Inglés para el trabajo" },
+            { "id": "ingles-presentaciones", "title": "Inglés para presentaciones" },
+            { "id": "ingles-reuniones", "title": "Inglés para reuniones y negociación" }
           ]
         }
-      ]
+      ],
+      "keywords": ["ingles", "inglés", "english", "b1", "b2", "conversacion"],
+      "cta": "Comienza Inglés para el trabajo hoy y mejora tus posibilidades laborales."
+    },
+    {
+      "id": "cloud-devops",
+      "name": "Cloud Computing y DevOps",
+      "certification": true,
+      "micro_goal": "En 14 días comprenderás los fundamentos de la nube y estarás en camino a AWS/Azure.",
+      "routes": [
+        {
+          "id": "ruta-cloud-devops",
+          "title": "Ruta de Cloud & DevOps",
+          "courses": [
+            { "id": "intro-nube", "title": "Introducción a la Nube" },
+            { "id": "aws-cloud-practitioner", "title": "AWS Cloud Practitioner (preparación)" },
+            { "id": "azure-fundamentals", "title": "Microsoft Azure Fundamentals (AZ-900)" },
+            { "id": "devops-basics", "title": "Fundamentos de DevOps y CI/CD" }
+          ]
+        }
+      ],
+      "keywords": ["cloud", "devops", "aws", "azure", "gcp", "infraestructura", "ci/cd"],
+      "cta": "Empieza Introducción a la Nube y avanza hacia tu certificación."
+    },
+    {
+      "id": "rrhh-liderazgo",
+      "name": "Recursos Humanos y Liderazgo",
+      "certification": true,
+      "micro_goal": "En 14 días estarás gestionando tu primer dashboard de People Analytics.",
+      "routes": [
+        {
+          "id": "ruta-rrhh-liderazgo",
+          "title": "Ruta de RRHH & Liderazgo",
+          "courses": [
+            { "id": "okrs-managers", "title": "OKRs: herramienta clave para managers" },
+            { "id": "people-analytics", "title": "People Analytics para RRHH" },
+            { "id": "liderazgo-equipos", "title": "Liderazgo de equipos y comunicación" }
+          ]
+        }
+      ],
+      "keywords": ["rrhh", "liderazgo", "people analytics", "talento", "cultura", "okrs"],
+      "cta": "Inicia OKRs: herramienta clave para managers hoy."
     }
-  ]
+  ],
+  "platform": {
+    "name": "Platzi",
+    "courses_count": ">1900",
+    "course_format": "100% online, 20-30 min/día metas-cortas, progreso visible semanal",
+    "certificates": {
+      "digital": true,
+      "physical": "Para rutas de perfil profesional marcadas con ✅ puedes recibir certificado físico."
+    },
+    "subscription": "Plan Expert y otros disponibles"
+  }
 }
