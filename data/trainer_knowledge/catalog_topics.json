@@ -1,0 +1,41 @@
+{
+  "catalogo_temas_permitidos": {
+    "transformacion_que_vendemos": [
+      "Avanzar profesionalmente con habilidades actuales y demandadas",
+      "Construir una carrera más estable, flexible y bien pagada",
+      "Desarrollar confianza al aprender y aplicar nuevos conocimientos",
+      "Crear oportunidades laborales reales en tecnología e innovación",
+      "Vivir un proceso de crecimiento continuo, no solo de aprendizaje"
+    ],
+    "caracteristicas_producto": [
+      "Rutas guiadas de aprendizaje estructuradas por niveles",
+      "Certificaciones digitales verificables que fortalecen tu perfil",
+      "Comunidad de aprendizaje con personas que buscan lo mismo que tú",
+      "Mentoría y acompañamiento de expertos en activo",
+      "Proyectos reales que te ayudan a aplicar lo aprendido",
+      "Preparación oficial para certificaciones reconocidas (Cloud, IA, Inglés, Seguridad)"
+    ],
+    "beneficios_producto": [
+      "Aprendes de forma práctica y aplicable a tu trabajo o proyectos",
+      "Evolucionas de aprendiz a profesional con guía clara y medible",
+      "Validas tus avances con certificaciones reconocidas",
+      "Construyes un portafolio que demuestra tus habilidades",
+      "Recibes orientación para enfocar tu aprendizaje hacia tus metas laborales"
+    ],
+    "beneficios_vida": [
+      "Consigues un nuevo empleo o creces en el actual",
+      "Aumentas tus ingresos gracias a habilidades actualizadas",
+      "Desarrollas confianza para liderar o emprender",
+      "Conectas con una red que impulsa tu crecimiento profesional",
+      "Transformas tu futuro aprendiendo de forma constante y estratégica"
+    ],
+    "guion_base_ferbot": {
+      "estructura": [
+        "Inicia con el beneficio de producto (qué podrá lograr la persona)",
+        "Conecta con una o dos características que dan soporte a ese beneficio",
+        "Cierra con el beneficio de vida (el cambio tangible que experimentará)"
+      ],
+      "ejemplo": "Aquí puedes desarrollar habilidades reales que te preparan para nuevas oportunidades. Trabajas con rutas guiadas y acompañamiento experto, y eso se traduce en más confianza y mejores resultados en tu carrera."
+    }
+  }
+}
