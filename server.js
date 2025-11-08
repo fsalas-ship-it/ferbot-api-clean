@@ -1,4 +1,4 @@
-// server.js — FerBot API (catálogo + precios + link de pago en intent: precio)
+// server.js — FerBot API (catálogo + precios + link + EMOJIS por intent/stage)
 // -----------------------------------------------------------------------------------
 require("dotenv").config();
 
@@ -86,6 +86,36 @@ function sanitizeReply(text=""){
   return t;
 }
 
+// ====== EMOJIS ======
+const EMOJI_BY_INTENT = {
+  precio:       ["💸","✨"],
+  tiempo:       ["⏱️","📆"],
+  cert:         ["🎓","✅"],
+  competencia:  ["🆚","🚀"],
+  pitch:        ["🚀","🌱"],
+  empleo:       ["💼","📈"],
+  _default:     ["🤝","💡"]
+};
+const EMOJI_BY_STAGE = {
+  integracion:  "🤝",
+  sondeo:       "🔎",
+  rebatir:      "🧩",
+  "pre_cierre": "✅",
+  cierre:       "🔒"
+};
+function decorateWithEmojis(reply="", intent="_default", stage="_") {
+  const pool = EMOJI_BY_INTENT[intent] || EMOJI_BY_INTENT._default;
+  const lead = EMOJI_BY_STAGE[stage] || "";
+  // Evitar duplicar si ya vienen emojis
+  const hasEmoji = /[\u{1F300}-\u{1FAFF}]/u.test(reply);
+  let decorated = reply;
+  if (!hasEmoji) {
+    const pick = pool[Math.floor(Math.random() * pool.length)] || "";
+    decorated = [lead, reply, pick].filter(Boolean).join(" ");
+  }
+  return clampReplyToWhatsApp(decorated, 220);
+}
+
 // ===== CATALOGO =====
 async function readCatalogSafe() {
   try {
@@ -100,9 +130,9 @@ async function readCatalogSafe() {
 function bestAreaMatch(catalog, text="") {
   const s = (text||"").toLowerCase();
   let best = null, score = 0;
-  for (const area of catalog.areas || []) {
+  for (const area of (catalog.areas || [])) {
     let sc = 0;
-    for (const kw of area.keywords || []) {
+    for (const kw of (area.keywords || [])) {
       if (s.includes(String(kw).toLowerCase())) sc += 1;
     }
     if (sc > score) { score = sc; best = area; }
@@ -120,7 +150,6 @@ async function readPricesSafe() {
     return { currencies: {}, promo: {} };
   }
 }
-// Detección básica de moneda por texto (palabras clave); fallback COP
 function detectCurrencyByText(text="") {
   const s = (text||"").toLowerCase();
   if (/\b(m[eé]xico|mxn|cdmx|mex)\b/.test(s)) return "MXN";
@@ -136,21 +165,18 @@ function detectCurrencyByText(text="") {
   if (/\b(argentina|ars|buenos aires)\b/.test(s)) return "ARS";
   if (/\b(usa|eeuu|estados unidos|usd|miami|ny|new york)\b/.test(s)) return "USD";
   if (/\b(europa|eur|euros|espa[ñn]a|madrid|barcelona)\b/.test(s)) return "EUR";
-  return "COP"; // default
+  return "COP";
 }
-// Formateo rápido con símbolo
 function money(fmtCurrency, n) {
   const symbols = { MXN:"$","COP":"$","CLP":"$","PEN":"S/","UYU":"$","GTQ":"Q","BOB":"Bs","PYG":"₲","DOP":"RD$","CRC":"₡","ARS":"$","USD":"$","EUR":"€" };
   const sym = symbols[fmtCurrency] || "";
-  return `${sym}${n.toLocaleString("es-CO")}`;
+  return `${sym}${Number(n).toLocaleString("es-CO")}`;
 }
-// Construir líneas de precio (solo Expert y Expert Duo) según lista o promo
 function buildPriceLines(prices, currency, usePromo=true) {
   const cur = prices.currencies[currency];
   if (!cur) return [];
   const src = usePromo ? prices.promo[currency] : cur;
   if (!src) return [];
-  // Solo Expert y Duo (no Grupos)
   const out = [];
   if (src.Expert != null) out.push({ plan: "Expert", value: src.Expert });
   if (src.Duo    != null) out.push({ plan: "Expert Duo", value: src.Duo });
@@ -348,6 +374,7 @@ app.post("/assist_openai", async (req, res) => {
 
     const raw = r?.choices?.[0]?.message?.content?.trim() || `Hola ${name}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`;
     let reply = sanitizeReply(raw);
+    reply = decorateWithEmojis(reply, intent, stage);
     await trackShown(intent, stage, reply);
     res.json({
       ok: true,
@@ -380,7 +407,6 @@ function fallbackNext(stage) {
   };
   return map[stage] || "Cerrar con CTA simple al plan anual.";
 }
-
 function parseReplyWhyNext(content){
   const mReply = content.match(/REPLY:\s*([\s\S]*?)(?:\n+WHY:|\n+NEXT:|$)/i);
   const mWhy   = content.match(/WHY:\s*(.*?)(?:\n+NEXT:|$)/i);
@@ -402,7 +428,6 @@ app.post("/assist_trainer", async (req, res) => {
     }
     const model = process.env.OPENAI_MODEL || "gpt-5";
 
-    // Reglas duras y estilo Ferney
     const rules = [
       "Eres FerBot (Platzi, Colombia). Voz: Ferney (humano, directo, cálido).",
       "WhatsApp: 1–2 frases, ≤220 caracteres. Nada de llamadas, envíos ni promesas sin base.",
@@ -438,12 +463,12 @@ app.post("/assist_trainer", async (req, res) => {
       ].filter(Boolean).join("\n");
     }
 
-    // Precios (para intent precio en cualquier etapa)
+    // Precios cuando el intent sea "precio" (en cualquier etapa)
     const prices = await readPricesSafe();
     let priceContext = "";
     if (intent === "precio") {
       const curr = detectCurrencyByText(`${question} ${context}`);
-      const lines = buildPriceLines(prices, curr, true); // promo por defecto
+      const lines = buildPriceLines(prices, curr, true); // promo
       if (lines.length) {
         priceContext = [
           `Moneda detectada: ${curr}`,
@@ -489,21 +514,22 @@ app.post("/assist_trainer", async (req, res) => {
       reply = clampReplyToWhatsApp(content || `Hola ${safeName}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`);
     }
     reply = sanitizeReply(reply);
-    // No permitir "Grupos" en precios
     reply = reply.replace(/\bgrupos?\b/gi, "").replace(/\s{2,}/g, " ").trim();
 
+    // Link de precios si el cliente preguntó por precio
+    if (intent === "precio" && !/platzi\.com\/precios/i.test(reply)) {
+      const suffix = " Más opciones aquí: platzi.com/precios";
+      reply = clampReplyToWhatsApp(`${reply} ${suffix}`, 220);
+    }
+
+    // Añadir emojis de forma segura
+    reply = decorateWithEmojis(reply, intent, stage);
+
     if (violatesHardRules(reply)) {
-      reply = `Entendido, ${safeName}; hay una ruta clara para tu objetivo y puedes empezar hoy mismo.`;
+      reply = decorateWithEmojis(`Entendido, ${safeName}; hay una ruta clara para tu objetivo y puedes empezar hoy mismo.`, intent, stage);
     }
     if (!why)  why  = fallbackWhy(stage, intent);
     if (!next) next = fallbackNext(stage);
-
-    // Si el cliente preguntó por precio y no apareció el link, lo anexamos de forma corta
-    if (intent === "precio" && !/platzi\.com\/precios/i.test(reply)) {
-      const suffix = " Más opciones aquí: platzi.com/precios";
-      const joined = `${reply} ${suffix}`.trim();
-      reply = clampReplyToWhatsApp(joined, 220);
-    }
 
     await trackShown(intent, stage, reply);
 
