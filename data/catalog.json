@@ -1,0 +1,63 @@
+{
+  "areas": [
+    {
+      "name": "Inteligencia Artificial + Marketing",
+      "keywords": ["ia", "inteligencia artificial", "marketing", "growth", "content", "copy", "ads", "performance"],
+      "certification": true,
+      "routes": [
+        {
+          "title": "Ruta de Marketing con IA",
+          "courses": [
+            { "title": "Prompting Estratégico para Marketing" },
+            { "title": "Automatización de Contenidos con IA" },
+            { "title": "Análisis de Audiencias con IA" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Data & Analytics",
+      "keywords": ["data", "analitica", "analytics", "sql", "power bi", "excel", "tabla", "dashboard"],
+      "certification": true,
+      "routes": [
+        {
+          "title": "Ruta de Analítica de Datos",
+          "courses": [
+            { "title": "Fundamentos de Datos y Métricas" },
+            { "title": "SQL desde Cero a Práctico" },
+            { "title": "Dashboards con Power BI" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Backend & APIs",
+      "keywords": ["backend", "node", "api", "express", "servidor", "javascript", "desarrollo"],
+      "certification": true,
+      "routes": [
+        {
+          "title": "Ruta de Backend con JavaScript",
+          "courses": [
+            { "title": "JavaScript para Backend" },
+            { "title": "APIs con Node y Express" },
+            { "title": "Autenticación y Buenas Prácticas" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Inglés Profesional",
+      "keywords": ["ingles", "inglés", "b1", "b2", "idioma", "trabajo global"],
+      "certification": false,
+      "routes": [
+        {
+          "title": "Ruta de Inglés para el Trabajo",
+          "courses": [
+            { "title": "Inglés Aplicado al Trabajo Diario" },
+            { "title": "Presentaciones y Reuniones en Inglés" }
+          ]
+        }
+      ]
+    }
+  ]
+}
