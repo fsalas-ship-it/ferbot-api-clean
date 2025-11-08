@@ -1,4 +1,4 @@
-// server.js — FerBot API (trainer por etapa + guardrails + precios en cierre)
+// server.js — FerBot API (completo con catálogo: offline, openai, trainer, dashboard, CORS, panel)
 // -----------------------------------------------------------------------------------
 require("dotenv").config();
 
@@ -10,10 +10,15 @@ const path = require("path");
 
 // ============== CONFIG BÁSICA ==============
 const app = express();
-app.use(cors({ origin: (_o, cb) => cb(null, true), credentials: false }));
+
+// CORS amplio (Hilos, extensión, panel)
+app.use(cors({
+  origin: (origin, cb) => cb(null, true),
+  credentials: false
+}));
 app.use(express.json({ limit: "1mb" }));
 
-// Rutas estáticas
+// Rutas de archivos públicos
 const ROOT_DIR   = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 app.use(express.static(PUBLIC_DIR));
@@ -25,8 +30,10 @@ const VARIANTS_PATH = path.join(DATA_DIR, "variants.json");
 const STATS_PATH    = path.join(DATA_DIR, "stats.json");
 const TRAINER_TXT   = path.join(DATA_DIR, "trainer_identity.txt");
 const TRAINER_KNOW  = path.join(DATA_DIR, "trainer_knowledge");
+// Catálogo
+const CATALOG_PATH  = path.join(DATA_DIR, "catalog.json");
 
-// asegurar estructura
+// Asegurar estructura
 for (const p of [DATA_DIR, TRAINER_KNOW]) {
   if (!fssync.existsSync(p)) fssync.mkdirSync(p, { recursive: true });
 }
@@ -34,32 +41,7 @@ if (!fssync.existsSync(MEMORY_PATH))   fssync.writeFileSync(MEMORY_PATH, JSON.st
 if (!fssync.existsSync(VARIANTS_PATH)) fssync.writeFileSync(VARIANTS_PATH, JSON.stringify({ byKey: {} }, null, 2));
 if (!fssync.existsSync(STATS_PATH))    fssync.writeFileSync(STATS_PATH, JSON.stringify({ byKey: {} }, null, 2));
 if (!fssync.existsSync(TRAINER_TXT))   fssync.writeFileSync(TRAINER_TXT, "");
-
-// ============== PRECIOS & CATALOGO =========
-// Link único de pago (no generamos dinámicos en panel)
-const PAY_URL = "https://platzi.com/precios/";
-
-// Expert y Duo únicamente (evitar confusión de grupos en la misma conversación)
-const PRICES = {
-  COP: { currency: "COP", Expert: 849999, ExpertDuo: 1299000 },
-  MXN: { currency: "MXN", Expert: 4299,   ExpertDuo: 5599   },
-  USD: { currency: "USD", Expert: 209,    ExpertDuo: 299    },
-  EUR: { currency: "EUR", Expert: 249,    ExpertDuo: 339    },
-  CLP: { currency: "CLP", Expert: 186999, ExpertDuo: 245999 },
-  PEN: { currency: "PEN", Expert: 799,    ExpertDuo: 999    },
-  // agrega las que uses
-};
-
-// Tópicos/claims seguros para mencionar explícitamente
-const SAFE_PHRASES = [
-  // áreas amplias
-  "inteligencia artificial", "data", "datos", "analítica", "programación",
-  "cloud", "nube", "seguridad", "ciberseguridad", "product management",
-  "marketing digital", "diseño", "ux", "ui", "inglés", "emprendimiento",
-  "automatización", "no-code", "low-code",
-  // en inglés
-  "ai", "data science", "cybersecurity", "cloud", "pm", "marketing", "design", "english"
-];
+if (!fssync.existsSync(CATALOG_PATH))  fssync.writeFileSync(CATALOG_PATH, JSON.stringify({ areas: [], platform: {} }, null, 2));
 
 // ============== HELPERS ====================
 async function readJsonSafe(file, fallback) {
@@ -69,19 +51,16 @@ async function readJsonSafe(file, fallback) {
 async function writeJsonPretty(file, obj) {
   await fs.writeFile(file, JSON.stringify(obj, null, 2), "utf8");
 }
+function normalizeSpaces(s = "") {
+  return String(s).replace(/\s+/g, " ").replace(/ ,/g, ",").replace(/ \./g, ".").trim();
+}
+function normKey(s=""){ return String(s||"").toLowerCase().replace(/\s+/g," ").trim(); }
 function clampReplyToWhatsApp(text, maxChars=220) {
-  let t = String(text || "").trim();
+  let t = (text || "").trim();
   const parts = t.split(/(?<=[.!?])\s+/).filter(Boolean);
   t = parts.slice(0,2).join(" ");
   if (t.length > maxChars) t = t.slice(0, maxChars-1).trimEnd() + "…";
   return t;
-}
-function sanitizeReply(text=""){
-  // Prohibimos llamadas, envíos, links no controlados
-  let t = clampReplyToWhatsApp(text, 260); // le damos un poco más de aire (tu límite real lo impone el clamp final a 220 antes de enviar)
-  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|material(es)?)\b/gi, "")
-       .replace(/\s+/g," ").trim();
-  return clampReplyToWhatsApp(t, 220);
 }
 function inferIntent(q = "") {
   const s = (q || "").toLowerCase();
@@ -93,70 +72,44 @@ function inferIntent(q = "") {
   if (/(empleo|trabajo|vacante|contratar|contratación)/.test(s)) return "empleo";
   return "_default";
 }
-function escapeHtml(s=""){return String(s).replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]))}
+function escapeHtml(s=""){return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]))}
 
-// Sanitiza claims “curso/programa/ruta/especialidad de/en <topic>” no permitidos
-function sanitizeTopicClaims(reply="") {
-  let out = reply;
-  const re = /\b(curso|programa|ruta|especialidad|especializado)\s+(?:de|en)\s+([a-záéíóúñ0-9\s\-\+]+)\b/ig;
-  out = out.replace(re, (full, _kind, rawTopic) => {
-    const topic = String(rawTopic || "").trim().toLowerCase();
-    const isSafe = SAFE_PHRASES.some(t => topic.includes(t) || t.includes(topic));
-    if (isSafe) return full; // permitido
-    const saysEnglish = /\bingl[eé]s\b/i.test(full) || /\bingl[eé]s\b/i.test(out);
-    if (saysEnglish) return "inglés profesional aplicable a tu área";
-    return "rutas aplicadas y módulos enfocados";
-  });
-  return out.replace(/\s+/g," ").trim();
+// Guardas duras post-generación
+function violatesHardRules(text=""){
+  const banned = /\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/i;
+  return banned.test(text);
+}
+function sanitizeReply(text=""){
+  let t = clampReplyToWhatsApp(text, 220);
+  t = t.replace(/\b(te (env[ií]o|mando|paso|agendo|llamo)|llamada|link|material(es)?)\b/gi, "").replace(/\s+/g," ").trim();
+  return t;
 }
 
-// Post-filtro por ETAPA: lo que está prohibido/permitido según stage
-function postFilterByStage(text, stage){
-  let out = String(text || "");
-  if (stage === "integracion" || stage === "sondeo") {
-    // Nada de precio, links, ni promesas sectoriales; apertura/pregunta breve
-    out = out.replace(PAY_URL, "").replace(/https?:\/\/\S+/g, "");
-    out = out.replace(/\b(\$|USD|EUR|COP|MXN|CLP|PEN|ARS|CRC|DOP|UYU|GTQ|BOB|PYG)\b[^\s]*/gi, "");
+// ===== CATALOGO: carga segura + matching por keywords =====
+async function readCatalogSafe() {
+  try {
+    const raw = await fs.readFile(CATALOG_PATH, "utf8");
+    const json = JSON.parse(raw);
+    if (!json || !Array.isArray(json.areas)) return { areas: [], platform: {} };
+    return json;
+  } catch {
+    return { areas: [], platform: {} };
   }
-  return out.trim();
+}
+function bestAreaMatch(catalog, text="") {
+  const s = (text||"").toLowerCase();
+  let best = null, score = 0;
+  for (const area of catalog.areas || []) {
+    let sc = 0;
+    for (const kw of area.keywords || []) {
+      if (s.includes(String(kw).toLowerCase())) sc += 1;
+    }
+    if (sc > score) { score = sc; best = area; }
+  }
+  return { area: best, score };
 }
 
-function formatMoney(n, cur){
-  try{
-    if (cur==="COP"||cur==="CLP"||cur==="ARS"||cur==="PYG") return new Intl.NumberFormat("es-CO").format(n);
-    if (cur==="MXN") return new Intl.NumberFormat("es-MX").format(n);
-    if (cur==="USD") return new Intl.NumberFormat("en-US").format(n);
-    if (cur==="EUR") return new Intl.NumberFormat("de-DE").format(n);
-    if (cur==="PEN") return new Intl.NumberFormat("es-PE").format(n);
-  }catch{}
-  return String(n);
-}
-
-// Según país/currency elegido por el asesor en su mente; si no, intenta detectar por texto (muy simple)
-function pickCurrencyFromQuestion(q=""){
-  const s = (q||"").toLowerCase();
-  if (/colom|cop|\$ ?1\.?\d{2}\.?0{3}/.test(s)) return "COP";
-  if (/méxic|mxn/.test(s)) return "MXN";
-  if (/dólar|usd/.test(s)) return "USD";
-  if (/euro|eur/.test(s)) return "EUR";
-  if (/chile|clp/.test(s)) return "CLP";
-  if (/per[uú]|pen/.test(s)) return "PEN";
-  return "COP"; // fallback Colombia
-}
-
-function priceOfferSnippet(intent, stage, question){
-  if (stage !== "cierre") return "";                 // solo en cierre
-  if (intent !== "precio") return "";                // y solo si la intención es precio/decisión
-  const cur = pickCurrencyFromQuestion(question);
-  const row = PRICES[cur];
-  if (!row) return "";
-  const e   = `${row.currency} ${formatMoney(row.Expert, row.currency)}`;
-  const d   = `${row.currency} ${formatMoney(row.ExpertDuo, row.currency)}`;
-  // Frase A/B clara, corta
-  return `Plan Expert: ${e} · Expert Duo (2): ${d}. Activas aquí: ${PAY_URL}`;
-}
-
-// ============== STATS ======================
+// Stats helpers
 function ensureStatEntry(stats, intent, stage, text) {
   const key = `${intent}::${stage}`;
   if (!stats.byKey[key]) stats.byKey[key] = {};
@@ -174,13 +127,17 @@ async function trackRating(intent, stage, replyText, rating) {
   const stats = await readJsonSafe(STATS_PATH, { byKey: {} });
   const { key, t } = ensureStatEntry(stats, intent, stage, replyText);
   stats.byKey[key][t].shown = Math.max(stats.byKey[key][t].shown, 1);
-  if (rating === "good") { stats.byKey[key][t].good += 1; stats.byKey[key][t].wins += 1; }
-  else if (rating === "regular") { stats.byKey[key][t].regular += 1; stats.byKey[key][t].wins += 0.5; }
-  else if (rating === "bad") { stats.byKey[key][t].bad += 1; }
+  if (rating === "good") {
+    stats.byKey[key][t].good += 1; stats.byKey[key][t].wins += 1;
+  } else if (rating === "regular") {
+    stats.byKey[key][t].regular += 1; stats.byKey[key][t].wins += 0.5;
+  } else if (rating === "bad") {
+    stats.byKey[key][t].bad += 1;
+  }
   await writeJsonPretty(STATS_PATH, stats);
 }
 
-// Variants offline (por si OpenAI falla)
+// Variants offline (simple)
 let VAR_CACHE = { byKey: {} };
 async function loadVariants() {
   const v = await readJsonSafe(VARIANTS_PATH, { byKey: {} });
@@ -190,18 +147,24 @@ function pickVariant(intent, stage, name) {
   const key = `${intent}::${stage}`;
   const block = VAR_CACHE.byKey[key] || VAR_CACHE.byKey[`_default::${stage}`] || VAR_CACHE.byKey[`_default::rebatir`];
   const list = block?.variants || [];
-  if (!list.length) return `Hola ${name}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`;
+  if (!list.length) {
+    return `Hola ${name}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`;
+    }
   let total = list.reduce((acc, v) => acc + (Number(v.weight || 1)), 0);
   let r = Math.random() * total;
-  for (const v of list) { r -= Number(v.weight || 1); if (r <= 0) return (v.text || "").replace(/{name}/g, name); }
+  for (const v of list) {
+    r -= Number(v.weight || 1);
+    if (r <= 0) return (v.text || "").replace(/{name}/g, name);
+  }
   return (list[0].text || "").replace(/{name}/g, name);
 }
 
 // Trainer cache
 let TRAINER_IDENTITY = "";
 async function loadTrainerIdentity() {
-  try { TRAINER_IDENTITY = (await fs.readFile(TRAINER_TXT, "utf8")).trim(); }
-  catch { TRAINER_IDENTITY = ""; }
+  try {
+    TRAINER_IDENTITY = (await fs.readFile(TRAINER_TXT, "utf8")).trim();
+  } catch { TRAINER_IDENTITY = ""; }
 }
 
 // Knowledge por intent (para bajar latencia y subir pertinencia)
@@ -232,7 +195,7 @@ async function buildKnowledgeSnippet(intent){
   } catch { return ""; }
 }
 
-// ============== HEALTH & ADMIN =============
+// ============== HEALTH =====================
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -243,10 +206,18 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// ===== GET /catalog (ver contenido del catálogo) =====
+app.get("/catalog", async (_req, res) => {
+  const catalog = await readCatalogSafe();
+  res.json({ ok:true, ...catalog });
+});
+
+// ============== ADMIN ======================
 app.get("/admin/reloadTrainer", async (_req, res) => {
   await loadTrainerIdentity();
+
+  // medir tamaño total de knowledge
   let total_knowledge_len = 0;
-  let topics_len = SAFE_PHRASES.length;
   try {
     const files = await fs.readdir(TRAINER_KNOW);
     for (const f of files) {
@@ -255,7 +226,17 @@ app.get("/admin/reloadTrainer", async (_req, res) => {
       total_knowledge_len += t.length;
     }
   } catch { total_knowledge_len = 0; }
-  res.json({ ok: true, identity_len: (TRAINER_IDENTITY||"").length, knowledge_len: total_knowledge_len, topics_len });
+
+  // medir catálogo
+  const catalog = await readCatalogSafe();
+  const catalog_len = (catalog.areas || []).length;
+
+  res.json({
+    ok: true,
+    identity_len: (TRAINER_IDENTITY || "").length,
+    knowledge_len: total_knowledge_len,
+    catalog_len
+  });
 });
 
 // ============== OFFLINE ASSIST =============
@@ -266,17 +247,81 @@ app.post("/assist", async (req, res) => {
     const intent = inferIntent(question);
     const reply = clampReplyToWhatsApp(pickVariant(intent, stage, name));
     await trackShown(intent, stage, reply);
-    res.json({ ok: true, text: reply, result: { reply, intent, stage, model: "offline-variants" } });
+    res.json({
+      ok: true,
+      text: reply,
+      result: { reply, intent, stage, model: "offline-variants" }
+    });
   } catch (err) {
     res.status(500).json({ ok:false, error:"assist_failed", detail: String(err && err.message || err) });
   }
 });
 
-// ============== OPENAI SDK =================
+// ============== OPENAI SIMPLE ==============
 const { OpenAI } = require("openai");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || ""
+});
 
-// parser REPLY/WHY/NEXT
+app.post("/assist_openai", async (req, res) => {
+  try {
+    const { question = "", customerName = "Cliente", stage = "rebatir" } = req.body || {};
+    const name = customerName || "Cliente";
+    const intent = inferIntent(question);
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(400).json({ ok:false, error:"missing_openai_api_key" });
+    }
+    const model = process.env.OPENAI_MODEL || "gpt-5";
+    const rules = [
+      "Eres un asesor comercial de Platzi (Colombia).",
+      "Respondes corto (≤220c, 1–2 frases), sin ofrecer llamadas ni enviar material.",
+      "Vendes suscripción ANUAL; conecta características→beneficio→beneficio de vida."
+    ].join("\n");
+    const user = `Cliente:${name}\nStage:${stage}\nIntent:${intent}\nMensaje:${question}\nEntrega solo el mensaje final.`;
+
+    const r = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role:"system", content: rules },
+        { role:"user", content: user }
+      ]
+    });
+
+    const raw = r?.choices?.[0]?.message?.content?.trim() || `Hola ${name}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`;
+    let reply = sanitizeReply(raw);
+    await trackShown(intent, stage, reply);
+    res.json({
+      ok: true,
+      text: reply,
+      result: { reply, intent, stage, model }
+    });
+  } catch (err) {
+    res.status(500).json({ ok:false, error:"openai_failed", detail: stringifyErr(err) });
+  }
+});
+
+// ============== TRAINER (REPLY/WHY/NEXT) ===
+function fallbackWhy(stage, intent) {
+  const map = {
+    sondeo:     "Generar claridad sin fricción para orientar la ruta.",
+    rebatir:    "Convertir objeción en valor: plan anual + hábito real.",
+    pre_cierre: "Quitar fricción y facilitar decisión hoy.",
+    cierre:     "Confirmar activación del plan anual de forma amable.",
+    integracion:"Afirmar solución y abrir conversación con sintonía."
+  };
+  return map[stage] || `Guío por valor y CTA (${intent}/${stage}).`;
+}
+function fallbackNext(stage) {
+  const map = {
+    sondeo:     "Hacer una sola pregunta para orientar la ruta.",
+    rebatir:    "Reencuadrar y pedir confirmación simple.",
+    pre_cierre: "Ofrecer decisión A/B y confirmar.",
+    cierre:     "Confirmar activación hoy.",
+    integracion:"Invitar a que la persona comparta y mantener ritmo."
+  };
+  return map[stage] || "Cerrar con CTA simple al plan anual.";
+}
+
 function parseReplyWhyNext(content){
   const mReply = content.match(/REPLY:\s*([\s\S]*?)(?:\n+WHY:|\n+NEXT:|$)/i);
   const mWhy   = content.match(/WHY:\s*(.*?)(?:\n+NEXT:|$)/i);
@@ -287,100 +332,91 @@ function parseReplyWhyNext(content){
   return { reply, why, next };
 }
 
-// Generador central con reglas por ETAPA + guardrails
-async function genTrainerReplyDynamic({ question, customerName, stage, intent, context }){
-  const safeName = (customerName || "Cliente").trim();
-  const model = process.env.OPENAI_MODEL || "gpt-5";
-  const knowledge = await buildKnowledgeSnippet(intent);
-
-  const rules = [
-    "Eres FerBot (Platzi, Colombia). Voz: Ferney — humano, directo, cálido, con emojis sobrios cuando ayuden 🙂🚀.",
-    "WhatsApp: 1–2 frases, ≤220 caracteres. Sin llamadas, ‘te envío’, ni promesas que no existan.",
-    "Vendes plan ANUAL; conecta característica→beneficio→beneficio de vida.",
-    "Usa SOLO lo que el cliente dijo (objetivo, área, certificación, competencia). No inventes temas.",
-    "NO afirmes cursos/planes sectoriales (ej. 'inglés en salud') salvo que sea EXACTO a los claims permitidos.",
-    "Si el cliente trae un sector no permitido, usa wording seguro: 'inglés profesional aplicable a tu área' o 'rutas aplicadas y módulos enfocados'.",
-    "Varía redacción: cambia verbos, orden y micro-CTA respecto a respuestas obvias.",
-    "Formato ESTRICTO: 3 líneas — REPLY/WHY/NEXT."
-  ];
-
-  // reglas por ETAPA (durísimas)
-  if (stage === "integracion") {
-    rules.push(
-      "ETAPA: INTEGRACIÓN — Sintoniza y abre conversación. No vendas ni des precio ni pegues links. No prometas cursos sectoriales. 1 pregunta suave al final."
-    );
-  } else if (stage === "sondeo") {
-    rules.push(
-      "ETAPA: SONDEO — Haz 1 sola pregunta para enfocar meta (empleo, ascenso o proyecto). No cierres, no precio, sin links."
-    );
-  } else if (stage === "rebatir") {
-    rules.push(
-      "ETAPA: REBATIR — Toma la objeción y reencuadra a valor anual + hábito. CTA amable. Sin precio ni links aquí."
-    );
-  } else if (stage === "pre_cierre") {
-    rules.push(
-      "ETAPA: PRE-CIERRE — Recuerda 1–2 beneficios y avanza con pregunta A/B. Sin link aún."
-    );
-  } else if (stage === "cierre") {
-    rules.push(
-      "ETAPA: CIERRE — Pide confirmación. Si la intención es PRECIO, puedes mencionar Expert/Expert Duo y luego el sistema agregará el link."
-    );
-  }
-
-  const system = [
-    TRAINER_IDENTITY || "",
-    rules.join("\n"),
-    knowledge ? `Conocimiento relevante:\n${knowledge}` : ""
-  ].filter(Boolean).join("\n\n");
-
-  const user = [
-    `Nombre del cliente: ${safeName}`,
-    `Stage: ${stage}`,
-    `Intent: ${intent}`,
-    context ? `Contexto adicional: ${context}` : "",
-    "Extrae primero la necesidad EXACTA del mensaje del cliente (sin inventar).",
-    `Mensaje del cliente: ${question}`,
-    "Luego entrega REPLY/WHY/NEXT (3 líneas)."
-  ].filter(Boolean).join("\n");
-
-  const r = await openai.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user }
-    ]
-  });
-
-  let content = r?.choices?.[0]?.message?.content || "";
-  let { reply, why, next } = parseReplyWhyNext(content);
-  if (!reply) reply = clampReplyToWhatsApp(content || `Hola ${safeName}, ¿te muestro una ruta clara para empezar hoy?`);
-  reply = sanitizeReply(sanitizeTopicClaims(reply));
-  reply = postFilterByStage(reply, stage);
-
-  if (!why)  why  = "Sintonizar, guiar y mover a un siguiente paso con claridad.";
-  if (!next) next = "Proponer el paso concreto: enfocar meta, ruta o confirmación amable.";
-
-  // Agregar snippet de precios + link SOLO en cierre + intent precio
-  const priceLine = priceOfferSnippet(intent, stage, question);
-  if (priceLine) {
-    // si el reply está al límite, priorizamos el CTA de precio
-    let joined = `${reply} ${priceLine}`.trim();
-    reply = clampReplyToWhatsApp(joined, 220);
-  }
-
-  return { reply, why, next, model };
-}
-
-// ============== TRAINER ENDPOINT ===========
 app.post("/assist_trainer", async (req, res) => {
   try {
     const { question = "", customerName = "", stage = "rebatir", intent:intentIn, context = "" } = req.body || {};
+    const safeName = (customerName || "Cliente").trim();
     const intent = intentIn || inferIntent(question);
-    if (!process.env.OPENAI_API_KEY) return res.status(400).json({ ok:false, error:"missing_openai_api_key" });
 
-    const { reply, why, next, model } = await genTrainerReplyDynamic({
-      question, customerName, stage, intent, context
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(400).json({ ok:false, error:"missing_openai_api_key" });
+    }
+    const model = process.env.OPENAI_MODEL || "gpt-5";
+
+    // Reglas duras y estilo Ferney
+    const rules = [
+      "Eres FerBot (Platzi, Colombia). Voz: Ferney (humano, directo, cálido).",
+      "WhatsApp: 1–2 frases, ≤220 caracteres. Nada de llamadas, envíos o links.",
+      "Vendes plan ANUAL; conecta característica→beneficio→beneficio de vida.",
+      "Usa SOLO lo que el cliente dijo (objetivo, área, certificación, competencia).",
+      "NO introduzcas temas no mencionados (ej: tiempo o precio) a menos que el cliente los traiga.",
+      "Integración: afirmar solución y abrir conversación (sin sondeo duro ni pre-cierre).",
+      "Formato ESTRICTO (3 líneas):",
+      "REPLY: <mensaje listo WhatsApp>",
+      "WHY: <principio de venta/enseñanza breve>",
+      "NEXT: <siguiente paso comercial amable>",
+      "Varía redacción entre consultas; evita repetir frases previas."
+    ];
+
+    // Conocimiento por intent
+    const knowledge = await buildKnowledgeSnippet(intent);
+
+    // Catálogo → intento de match por keywords del texto del cliente
+    const catalog = await readCatalogSafe();
+    const { area: matchedArea, score: matchScore } = bestAreaMatch(catalog, question);
+
+    // Texto seguro para el modelo (no promete nada fuera del catálogo)
+    let catalogContext = "";
+    if (matchedArea && matchScore > 0) {
+      const route = (matchedArea.routes && matchedArea.routes[0]) || null;
+      const cursos = (route?.courses || []).map(c => `- ${c.title}`).slice(0, 3).join("\n");
+      catalogContext = [
+        `Área sugerida (catálogo seguro): ${matchedArea.name}`,
+        matchedArea.micro_goal ? `Micro-meta: ${matchedArea.micro_goal}` : "",
+        route ? `Ruta: ${route.title}` : "",
+        cursos ? `Cursos (ejemplos):\n${cursos}` : "",
+        matchedArea.certification ? "Incluye certificación." : "Sin certificación formal.",
+        matchedArea.cta ? `CTA sugerida: ${matchedArea.cta}` : ""
+      ].filter(Boolean).join("\n");
+    }
+
+    const system = [
+      TRAINER_IDENTITY || "",
+      rules.join("\n"),
+      knowledge ? `Conocimiento relevante:\n${knowledge}` : "",
+      catalogContext ? `Catálogo (guía segura, NO inventes):\n${catalogContext}` : ""
+    ].filter(Boolean).join("\n\n");
+
+    const user = [
+      `Nombre del cliente: ${safeName}`,
+      `Stage: ${stage}`,
+      `Intent: ${intent}`,
+      context ? `Contexto adicional: ${context}` : "",
+      "Extrae primero la necesidad EXACTA del mensaje del cliente (sin inventar):",
+      `Mensaje del cliente: ${question}`,
+      "Luego entrega REPLY/WHY/NEXT. Mantén las reglas duras."
+    ].filter(Boolean).join("\n");
+
+    const r = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user }
+      ]
     });
+
+    const content = r?.choices?.[0]?.message?.content || "";
+    let { reply, why, next } = parseReplyWhyNext(content);
+
+    if (!reply) {
+      reply = clampReplyToWhatsApp(content || `Hola ${safeName}, ¿te muestro una ruta clara para empezar hoy con 10–15 min al día?`);
+    }
+    reply = sanitizeReply(reply);
+    if (violatesHardRules(reply)) {
+      reply = `Entendido, ${safeName}; hay una ruta clara para tu objetivo y puedes empezar hoy mismo.`;
+    }
+    if (!why)  why  = fallbackWhy(stage, intent);
+    if (!next) next = fallbackNext(stage);
 
     await trackShown(intent, stage, reply);
 
@@ -439,7 +475,7 @@ app.get("/stats", async (_req, res) => {
     out.sort((a,b)=> (b.winrate - a.winrate) || (b.shown - a.shown));
     res.json({ ok: true, rows: out });
   } catch (err) {
-    res.status(500).json({ ok:false, error:"stats_failed", detail: String(err) });
+    res.status(500).json({ ok:false, error:"stats_failed", detail: stringifyErr(err) });
   }
 });
 
@@ -531,7 +567,10 @@ function stringifyErr(err){
 (async () => {
   await loadVariants();
   await loadTrainerIdentity();
-  console.log("➡️ OpenAI habilitado:", !!process.env.OPENAI_API_KEY, "| Modelo:", process.env.OPENAI_MODEL || "gpt-5");
+  console.log("➡️  OpenAI habilitado:", !!process.env.OPENAI_API_KEY, "| Modelo:", process.env.OPENAI_MODEL || "gpt-5");
   const PORT = Number(process.env.PORT || 3000);
-  app.listen(PORT, () => console.log(`🔥 FerBot API escuchando en http://localhost:${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`🔥 FerBot API escuchando en http://localhost:${PORT}`);
+  });
 })();
+
