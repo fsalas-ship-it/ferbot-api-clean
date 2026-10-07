@@ -29,6 +29,8 @@ export default async function handler(req, res) {
         const results = (await db.mget(sids.map(s => 'res:' + s))).filter(Boolean).map(summary);
         const aids = await db.lrange('adv:list', 0, 299);
         const advisors = (await db.mget(aids.map(a => 'adv:' + a))).filter(Boolean);
+        const fbStats = await db.mget(advisors.map(a => 'fb:stats:' + a.id));
+        advisors.forEach((a, i) => { a.ferbot = fbStats[i] || null; });
         const psids = await db.lrange('prac:list', 0, 999);
         const practices = (await db.mget(psids.map(s => 'res:' + s))).filter(Boolean).map(practiceSummary);
         return send(res, 200, { invites: invs, results, advisors, practices });
