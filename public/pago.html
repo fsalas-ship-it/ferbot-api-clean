@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Link de pago de prueba</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="screen"><div class="card">
+  <div class="brandline"><span class="mark">P</span><span>Simulador de ventas Platzi</span></div>
+  <h1>Link de pago de prueba</h1>
+  <p id="d">Este link pertenece a una prueba de ventas simulada. No es un pago real de Platzi y no se cobra nada.</p>
+</div></div>
+<script>
+(function(){
+  var src = new URLSearchParams(location.search).get('p') || location.pathname.replace(/^.*\/pago\//, '');
+  var m = String(src).match(/^(expert|duo|groups)-([a-z]{3})-([\d.]+)-(contado|4cuotas|12msi|transferencia|efectivo)/i);
+  if(!m) return;
+  var plan = { expert:'Expert', duo:'Duo', groups:'Groups' }[m[1].toLowerCase()];
+  var forma = { contado:'de contado con tarjeta', '4cuotas':'a 4 cuotas sin intereses', '12msi':'a 12 meses sin intereses', transferencia:'por transferencia o PSE', efectivo:'en efectivo' }[m[4].toLowerCase()];
+  var p = document.createElement('p');
+  p.textContent = 'Detalle del link: plan ' + plan + ', ' + Number(m[3]).toLocaleString('en-US') + ' ' + m[2].toUpperCase() + ', ' + forma + '.';
+  document.getElementById('d').after(p);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis prácticas · Platzi</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app"><div class="screen"><div class="card"><p class="muted">Cargando…</p></div></div></div>
+<script>
+(function(){
+'use strict';
+const $ = (s, r=document) => r.querySelector(s);
+const app = document.getElementById('app');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const mmss = ms => { const t=Math.max(0,Math.floor((ms||0)/1000)); return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); };
+const fmtDate = ts => ts ? new Date(ts).toLocaleString('es-CO', { dateStyle:'medium', timeStyle:'short' }) : '—';
+const params = new URLSearchParams(location.search);
+const k = params.get('k') || '';
+const DIMS = [['contexto','Contexto'],['canal','Canal'],['descubrimiento','Descubrimiento'],['recomendacion','Recomendación'],['objecion','Objeción'],['verdad','Verdad'],['cierre','Cierre'],['seguimiento','Seguimiento']];
+const STATUS_LABEL = { compro:'Venta (pagó)', no_compro:'No compró', enrutado:'Enrutado', sin_cerrar:'Sin cerrar', lo_pensare:'Lo va a pensar', sin_respuesta:'No volvió a responder', cerrada_tiempo:'Cerrada al acabar el tiempo', transferido:'Transferido', intencion:'Dijo que compraba (sin link)', link_enviado:'Link enviado sin pago', pendiente:'No llegó' };
+const list = a => (a||[]).filter(Boolean).map(x=>'<li>'+esc(x)+'</li>').join('');
+async function api(path, body){
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type':'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(!r.ok){ const e = new Error(j.error || 'http_'+r.status); e.code = j.error; throw e; }
+  return j;
+}
+function bar(label, v){ return '<div class="bar"><div class="lbl"><span>'+label+'</span><b>'+(v==null?'—':v+'%')+'</b></div><div class="trk"><div class="fill" style="width:'+(v||0)+'%"></div></div></div>'; }
+
+async function home(){
+  let info;
+  try{ info = await api('/api/practice?k='+encodeURIComponent(k)); }
+  catch(e){ app.innerHTML='<div class="screen"><div class="card"><h1>Link no válido</h1><p>Este link no es válido o fue desactivado. Pide uno nuevo a tu líder.</p></div></div>'; return; }
+  const ps = info.practices || [];
+  const first = (info.advisor.name||'').split(' ')[0];
+  const quals = ps.filter(p => p.status==='evaluada' && p.score && p.score.parts && p.score.parts.calidad!=null).map(p => p.score.parts.calidad);
+  const avg = quals.length ? Math.round(quals.reduce((a,b)=>a+b,0)/quals.length) : null;
+  app.innerHTML = '<div style="height:100%;overflow:auto"><div class="panel">'+
+    '<div class="phead"><span class="mark">P</span><h1 style="margin:0">Hola, '+esc(first)+'</h1><span class="sp"></span><a class="btn accent" href="/?k='+encodeURIComponent(k)+'">Nueva práctica</a></div>'+
+    '<div class="grid2"><div class="box"><h2 style="margin-top:0">Tu práctica</h2><p>Atiende clientes que ya hablaron con el bot de Platzi y llegan con una objeción. Practica cuantas veces quieras: puedes pausar o finalizar cuando lo necesites.</p></div>'+
+    '<div class="box"><h2 style="margin-top:0">Tu avance</h2><dl class="kv"><dt>Prácticas hechas</dt><dd>'+ps.length+'</dd><dt>Calidad promedio (matriz de Aura)</dt><dd>'+(avg==null?'—':avg+'%')+'</dd><dt>Meta de calidad</dt><dd>86%</dd></dl></div></div>'+
+    '<h2>Mis prácticas</h2>'+(ps.length ? '<div class="box scroll-x" style="padding:8px 12px"><table class="results"><thead><tr><th>Fecha</th><th>Duración</th><th>Calidad</th><th>Ventas</th><th>Estado</th></tr></thead><tbody>'+
+      ps.map(p => '<tr data-sid="'+esc(p.sid)+'" tabindex="0"><td>'+fmtDate(p.createdAt)+'</td><td>'+mmss(p.durationMs)+'</td><td>'+(p.status==='evaluada'&&p.score&&p.score.parts&&p.score.parts.calidad!=null?'<b>'+p.score.parts.calidad+'%</b>':'—')+'</td><td>'+(p.sales??0)+'</td><td>'+(p.status==='evaluada'?'Con feedback':'Sin feedback')+'</td></tr>').join('')+'</tbody></table></div>'
+      : '<div class="box"><p>Todavía no tienes prácticas. Pulsa <b>Nueva práctica</b> para empezar.</p></div>')+
+    '</div></div>';
+  app.querySelectorAll('tbody tr').forEach(tr => { const go=()=>{ history.pushState({}, '', '/asesor.html?k='+encodeURIComponent(k)+'&r='+tr.dataset.sid); detail(tr.dataset.sid); }; tr.onclick=go; tr.onkeydown=e=>{ if(e.key==='Enter') go(); }; });
+}
+async function evaluate(sid, d, onStep){
+  const done = (d.evaluation && d.evaluation.convs) || {};
+  const todo = d.conversations.filter(c => c.msgs.some(m=>m.f==='v') && !done[c.id]);
+  let i=0;
+  for(const c of todo){ i++; onStep('Analizando conversación '+i+' de '+todo.length+'…'); await api('/api/evaluate', { k, sid, part:'conv', cid:c.id }); }
+  onStep('Preparando tus recomendaciones…');
+  await api('/api/evaluate', { k, sid, part:'summary' });
+}
+async function detail(sid){
+  app.innerHTML='<div class="screen"><div class="card"><p class="muted">Cargando tu feedback…</p></div></div>';
+  let d; try{ d = await api('/api/practice', { k, action:'result', sid }); }catch(e){ home(); return; }
+  const ev=d.evaluation||{}, ce=ev.convs||{}, sum=ev.summary, sc=d.score||{}, m=d.metrics||{};
+  let h='<div style="height:100%;overflow:auto"><div class="panel"><div class="row" style="margin-bottom:14px"><button class="btn" id="bk">‹ Mis prácticas</button><span class="sp" style="flex:1"></span><a class="btn accent" href="/?k='+encodeURIComponent(k)+'">Nueva práctica</a></div>';
+  h+='<div class="box"><h1 style="margin-bottom:4px">Tu feedback</h1><div class="muted small">'+fmtDate(d.createdAt)+', duración '+mmss(d.durationMs)+(d.pauses?', '+d.pauses+' pausa(s)':'')+'</div>';
+  if(d.status!=='evaluada'){ h+='<p class="note" id="evn" style="margin-top:12px">Tu feedback aún no está listo. <button class="btn" id="ev">Generar mi feedback</button></p></div>'; }
+  else {
+    const q = sc.parts && sc.parts.calidad;
+    h+='<div class="row" style="margin-top:14px;gap:28px"><div class="score"><b>'+(q==null?'—':q+'%')+'</b><span class="muted">calidad</span></div><div><div>Meta de calidad: <b>86%</b></div><div>Ventas: <b>'+(m.sales||0)+'</b> de '+(m.buyersSeen||0)+' clientes dispuestos</div></div></div>';
+    if(sum) h+='<p style="margin-top:12px">'+esc(sum.resumen||'')+'</p>';
+    h+='</div>';
+    if(sum) h+='<div class="grid2" style="margin-top:16px"><div class="box"><h2 style="margin-top:0">Lo que hiciste bien</h2><ul class="clean">'+list(sum.fortalezas)+'</ul></div><div class="box"><h2 style="margin-top:0">Lo que puedes mejorar</h2><ul class="clean">'+list(sum.a_mejorar)+'</ul>'+((sum.entrenar||[]).filter(Boolean).length?'<h2>Qué practicar</h2><ul class="clean">'+list(sum.entrenar)+'</ul>':'')+'</div></div>';
+    const dimAvg = DIMS.map(([key,l]) => { const ps=Object.values(ce).map(e=>e&&e.dimensiones&&e.dimensiones[key]&&e.dimensiones[key].p).filter(p=>p===0||p===1||p===2); return [l, ps.length?Math.round(ps.reduce((s,p)=>s+p,0)/(2*ps.length)*100):null]; });
+    h+='<div class="grid2" style="margin-top:16px"><div class="box"><h2 style="margin-top:0">Matriz de calidad</h2>'+dimAvg.map(([l,v])=>bar(l,v)).join('')+'</div>';
+    const errs = sum && Array.isArray(sum.ortografia_errores) ? sum.ortografia_errores.filter(x=>x&&x.texto) : [];
+    h+='<div class="box"><h2 style="margin-top:0">Ortografía</h2>'+(sum?'<p>Puntaje: <b>'+(sum.ortografia??'—')+'</b> de 100'+(sum.mensajes_con_errores_pct!=null?'. Mensajes con algún error: <b>'+sum.mensajes_con_errores_pct+'%</b>':'')+'.</p>':'')+
+      (errs.length?'<div class="scroll-x"><table><thead><tr><th style="text-align:left">Escribiste</th><th style="text-align:left">Correcto</th></tr></thead><tbody>'+errs.map(x=>'<tr><td style="text-align:left">'+esc(x.texto)+'</td><td style="text-align:left">'+esc(x.correccion||'')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">No encontramos errores. ¡Bien!</p>')+'</div></div>';
+  }
+  h+='<h2>Tus conversaciones</h2>';
+  (d.conversations||[]).filter(c=>c.arrivedAt!=null).forEach(c => {
+    const e=ce[c.id];
+    h+='<details class="conv"><summary><b>'+esc(c.name)+'</b><span>'+esc(c.country)+'</span><span class="pill '+(c.status==='compro'||(c.status==='transferido'&&c.routing)?'avanzar':'revisar')+'">'+(STATUS_LABEL[c.status]||esc(c.status))+'</span>'+(e&&e.calidad!=null?'<span>Calidad '+e.calidad+'%</span>':'')+'</summary><div class="inner">';
+    if(e){
+      h+='<p>'+esc(e.comentario||'')+'</p><div class="scroll-x"><table><thead><tr><th>Dimensión</th><th>Puntaje</th><th style="text-align:left">Por qué</th></tr></thead><tbody>'+DIMS.map(([key,l])=>{ const x=(e.dimensiones||{})[key]||{}; return '<tr><td>'+l+'</td><td>'+(x.p==null?'No aplica':x.p+' de 2')+'</td><td style="text-align:left;white-space:normal">'+esc(x.nota||'')+'</td></tr>'; }).join('')+'</tbody></table></div>';
+      if((e.errores_criticos||[]).filter(Boolean).length) h+='<p class="err">Errores críticos: '+e.errores_criticos.filter(Boolean).map(esc).join('; ')+'</p>';
+    }
+    h+=c.msgs.map(x=> x.f==='s' ? '<div class="tr"><span class="t">'+mmss(x.t)+'</span><i>'+esc(x.x)+'</i></div>' : '<div class="tr '+(x.f==='v'?'v':'')+'"><span class="t">'+mmss(x.t)+'</span><b>'+(x.f==='c'?'Cliente':x.f==='b'?'Bot':'Tú')+':</b> '+esc(x.x)+'</div>').join('');
+    h+='</div></details>';
+  });
+  h+='</div></div>';
+  app.innerHTML=h;
+  $('#bk').onclick = () => { history.pushState({}, '', '/asesor.html?k='+encodeURIComponent(k)); home(); };
+  const evb=$('#ev'); if(evb) evb.onclick = async () => { evb.disabled=true; try{ await evaluate(sid, d, t => { const n=$('#evn'); if(n) n.firstChild.textContent=t+' '; }); }catch(e){ const n=$('#evn'); if(n) n.firstChild.textContent='No pudimos generar tu feedback ahora. Intenta en unos minutos. '; evb.disabled=false; return; } detail(sid); };
+}
+window.addEventListener('popstate', () => { const r=new URLSearchParams(location.search).get('r'); r ? detail(r) : home(); });
+params.get('r') ? detail(params.get('r')) : home();
+})();
+</script>
+</body>
+</html>

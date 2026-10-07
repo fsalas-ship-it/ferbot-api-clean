@@ -1,65 +1,356 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>FerBot · Dashboard</title>
-<style>
-body{background:#0b0f19;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;margin:0}
-.wrap{max-width:1100px;margin:20px auto;padding:0 12px}
-h1{font-size:18px;margin:0 0 12px}
-table{width:100%;border-collapse:collapse}
-th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;font-size:14px;text-align:left}
-.btn{padding:8px 10px;border-radius:10px;border:0;cursor:pointer;font-weight:700;margin-right:6px}
-.primary{background:#97C93E;color:#0b0f19}
-.ghost{background:#1b2333;color:#d1e2ff}
-.stat{display:inline-block;background:#101727;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 10px;margin-right:8px}
-</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Panel del reclutador · Simulador Platzi</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<div class="wrap">
-  <h1>FerBot · Dashboard</h1>
-  <div style="margin-bottom:10px">
-    <button id="reload" class="btn primary">Recargar Trainer</button>
-    <button id="panel" class="btn ghost">Abrir Panel</button>
-  </div>
-  <div id="stats" style="margin-bottom:10px"></div>
-  <table id="tbl">
-    <thead><tr><th>Intent</th><th>Stage</th><th>Texto</th></tr></thead>
-    <tbody></tbody>
-  </table>
-</div>
+<div id="app"><div class="screen"><div class="card"><p class="muted">Cargando…</p></div></div></div>
 <script>
-const BASE = location.origin;
-document.getElementById('panel').onclick=()=>open('/panel','_blank');
+(function(){
+'use strict';
+const $ = (s, r=document) => r.querySelector(s);
+const app = document.getElementById('app');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const mmss = ms => { const t=Math.max(0,Math.floor((ms||0)/1000)); return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); };
+const secs = s => s == null ? '—' : (s < 60 ? Math.round(s)+' s' : Math.floor(s/60)+' min '+Math.round(s%60)+' s');
+const fmtDate = ts => ts ? new Date(ts).toLocaleString('es-CO', { dateStyle:'medium', timeStyle:'short' }) : '—';
+const DIMS = [['contexto','Contexto'],['canal','Canal'],['descubrimiento','Descubrimiento'],['recomendacion','Recomendación'],['objecion','Objeción'],['verdad','Verdad'],['cierre','Cierre'],['seguimiento','Seguimiento']];
+const PART_LABELS = { calidad:'Calidad (matriz de Aura)', cierre:'Cierre y enrutamiento', carga:'Capacidad bajo carga', velocidad:'Velocidad de respuesta', ortografia:'Ortografía y longitud' };
+const WEIGHTS = { calidad:50, cierre:20, carga:15, velocidad:10, ortografia:5 };
+const STATUS_LABEL = { pendiente:'No llegó', abierta:'Abierta', compro:'Venta (pagó)', no_compro:'No compró', enrutado:'Enrutado', sin_cerrar:'Sin cerrar', lo_pensare:'Lo va a pensar', sin_respuesta:'Fantasma sin recuperar', cerrada_tiempo:'Cerrada al acabar el tiempo', transferido:'Transferido', intencion:'Dijo que compraba (sin link)', link_enviado:'Link enviado sin pago' };
+const INT_LABEL = { evaluacion:'Evaluación', entrenamiento:'Entrenamiento' };
+const PAY_ISSUE_LABEL = { tarjeta_rechazada:'tarjeta rechazada', link_no_abre:'el link no abre', duda_renovacion:'duda sobre la renovación', otro_medio:'quiere pagar con otro medio' };
+const ESTADO = { aprobado:['Aprobado','avanzar'], revisar:['Revisar','revisar'], no_aprobado:['No aprobado','descartar'] };
+const OBJ_LABEL = { precio:'Precio', tiempo:'Tiempo', sin_pc:'Sin computador', disciplina:'Disciplina', medios_pago:'Medios de pago', mas_barato:'Descuento o promo', desconfianza:'Desconfianza', cuotas:'Cuotas o financiación', certificado:'Certificado o validez', lo_pienso:'Lo voy a pensar' };
+const S = { pass: sessionStorage.getItem('simPass') || '', tab:'res', data:null, detail:null, evaluating:{} };
 
-document.getElementById('reload').onclick=async ()=>{
-  const r = await fetch(BASE+'/admin/reloadTrainer'); const j=await r.json();
-  alert('Trainer recargado.\nidentity_len='+j.identity_len+'\nknowledge_len='+j.knowledge_len);
-};
-
-async function load(){
-  const health = await (await fetch(BASE+'/health')).json();
-  document.getElementById('stats').innerHTML =
-    '<span class="stat">Modelo: '+health.model_env+'</span>'+
-    '<span class="stat">OpenAI: '+(health.openai?'OK':'OFF')+'</span>'+
-    '<span class="stat">Hora: '+(new Date(health.time)).toLocaleString()+'</span>';
-
-  // mostramos lo que el API registró como "shown"
-  const resp = await fetch(BASE+'/data/shown.jsonl'); // servida por express.static
-  if(!resp.ok){ return; }
-  const text = await resp.text();
-  const lines = text.trim().split('\n').filter(Boolean).reverse().slice(0,50);
-  const tbody = document.querySelector('#tbl tbody'); tbody.innerHTML='';
-  lines.forEach(l=>{
-    try{
-      const j = JSON.parse(l);
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td>'+j.intent+'</td><td>'+j.stage+'</td><td>'+j.text+'</td>';
-      tbody.appendChild(tr);
-    }catch{}
-  });
+async function api(path, body){
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: Object.assign({ 'x-admin-password': S.pass }, body ? { 'Content-Type':'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(!r.ok){ const e = new Error(j.error || 'http_'+r.status); e.code = j.error || 'http_'+r.status; e.status = r.status; e.message2 = j.message; throw e; }
+  return j;
 }
-load();
+function shell(inner){ app.innerHTML = '<div class="screen"><div class="card">'+inner+'</div></div>'; }
+
+async function init(){
+  let ping = {};
+  try{ ping = await api('/api/admin?action=ping'); }catch(e){}
+  const missing = [];
+  if(!ping.db) missing.push('Conectar la base de datos Upstash Redis desde la pestaña Storage de Vercel.');
+  if(!ping.ai) missing.push('Agregar la variable ANTHROPIC_API_KEY en Settings › Environment Variables.');
+  if(!ping.pass) missing.push('Agregar la variable ADMIN_PASSWORD (mínimo 8 caracteres).');
+  if(missing.length){ shell('<div class="brandline"><span class="mark">P</span><span>Panel del reclutador</span></div><h1>Falta terminar la configuración</h1><ul class="rules">'+missing.map(m=>'<li>'+esc(m)+'</li>').join('')+'</ul><p class="muted small">Después de agregar las variables, vuelve a desplegar el proyecto en Vercel (Deployments › Redeploy).</p>'); return; }
+  if(ping.auth) return renderPanel();
+  renderLogin();
+}
+function renderLogin(err){
+  shell('<div class="brandline"><span class="mark">P</span><span>Panel del reclutador</span></div><h1>Acceso del reclutador</h1>'+
+    '<label for="pw">Contraseña</label><input id="pw" type="password" autocomplete="current-password"><p id="msg" class="err" role="alert">'+(err?esc(err):'')+'</p><div class="row"><button class="btn primary" id="go">Entrar</button></div>');
+  const go = async () => { S.pass=$('#pw').value; try{ await api('/api/admin?action=list'); sessionStorage.setItem('simPass', S.pass); renderPanel(); }catch(e){ $('#msg').textContent='Contraseña incorrecta.'; } };
+  $('#go').onclick=go; $('#pw').onkeydown=e=>{ if(e.key==='Enter') go(); }; $('#pw').focus();
+}
+async function renderPanel(){
+  app.innerHTML = '<div style="height:100%;overflow:auto"><div class="panel">'+
+    '<div class="phead"><span class="mark">P</span><h1 style="margin:0">Panel del reclutador</h1><span class="sp"></span><button class="btn" id="out">Salir</button></div>'+
+    '<div class="tabs" role="tablist"><button class="tab '+(S.tab==='res'?'on':'')+'" data-t="res">Resultados</button><button class="tab '+(S.tab==='inv'?'on':'')+'" data-t="inv">Invitaciones</button><button class="tab '+(S.tab==='ase'?'on':'')+'" data-t="ase">Asesores</button><button class="tab '+(S.tab==='cfg'?'on':'')+'" data-t="cfg">Configuración</button></div><div id="pbody"><p class="muted">Cargando…</p></div></div></div>';
+  $('#out').onclick = () => { sessionStorage.removeItem('simPass'); S.pass=''; renderLogin(); };
+  app.querySelectorAll('.tab').forEach(b => b.onclick = () => { S.tab=b.dataset.t; S.detail=null; S.advisor=null; renderPanel(); });
+  try{ S.data = await api('/api/admin?action=list'); }catch(e){ if(e.status===401) return renderLogin('La sesión expiró.'); $('#pbody').innerHTML='<p class="err">No se pudieron cargar los datos.</p>'; return; }
+  if(S.tab==='inv') renderInvites(); else if(S.tab==='cfg') renderSettings(); else if(S.detail) renderDetail(S.detail); else if(S.tab==='ase') (S.advisor ? renderAdvisor(S.advisor) : renderAdvisors()); else renderResults();
+}
+
+/* ============ INVITACIONES ============ */
+function inviteLink(code){ return location.origin + '/?c=' + code; }
+const enc = encodeURIComponent;
+function waNumber(phone){ let d=String(phone||'').replace(/\D/g,''); if(d.length===10 && d[0]==='3') d='57'+d; return d; }
+function gmailUrl(to, subject, body){ return 'https://mail.google.com/mail/?view=cm&fs=1&to='+enc(to||'')+'&su='+enc(subject||'')+'&body='+enc(body||''); }
+function inviteMessage(i){
+  const first=(i.name||'').trim().split(/\s+/)[0]||'';
+  const st=S.settings||{ testMin:17, extraMin:3 };
+  return 'Hola, '+first+' 👋\n\nTe invitamos a la prueba de ventas de Platzi. Ábrela desde un computador con buena conexión a internet en este link:\n'+inviteLink(i.code)+'\n\nDura '+st.testMin+' minutos'+(st.extraMin?' (y puedes ganar '+st.extraMin+' minutos extra si gestionas bien tus conversaciones)':'')+'. El link es personal, sirve para una sola prueba y vence en 7 días. No recargues ni cierres la ventana hasta ver el mensaje final.\n\n¡Mucho éxito!\nEquipo de Direct Sales de Platzi';
+}
+async function renderInvites(){
+  if(!S.settings){ try{ S.settings=(await api('/api/admin?action=settings')).settings; }catch(e){} }
+  const invs = S.data.invites || [];
+  const st = { pendiente:'Pendiente', vencida:'Vencida', en_curso:'En curso', terminada:'Terminada' };
+  $('#pbody').innerHTML = '<div class="grid2"><div class="box"><h2 style="margin-top:0">Nueva invitación</h2>'+
+    '<label for="nm">Nombre del postulante</label><input id="nm" type="text" autocomplete="off">'+
+    '<label for="em">Correo</label><input id="em" type="text" inputmode="email" autocomplete="off" placeholder="nombre@correo.com">'+
+    '<label for="ph">Teléfono de WhatsApp</label><input id="ph" type="text" inputmode="tel" autocomplete="off" placeholder="+57 300 123 4567">'+
+    '<label for="pf">Perfil de la prueba</label><select id="pf"><option value="externos">Externos: solo venta nueva, enruta upgrades y renovaciones</option><option value="internos">Internos: puede vender Expert, Duo y Groups</option></select>'+
+    '<p id="msg" class="small" role="status"></p><div class="row"><button class="btn primary" id="cr">Crear invitación</button></div></div>'+
+    '<div class="box"><h2 style="margin-top:0">Cómo funciona</h2><p>Cada invitación genera un link personal de un solo uso que vence en 7 días.</p><p>Envíalo con <b>WhatsApp</b> o <b>Gmail</b>: se abre con el mensaje y el link ya escritos, y tú solo pulsas enviar. También puedes copiar el mensaje y pegarlo donde quieras.</p><p>Si la prueba se interrumpe y el postulante no puede retomarla desde su navegador, usa <b>Reactivar</b>.</p></div></div>'+
+    '<h2>Invitaciones</h2>'+(invs.length ? '<div class="box scroll-x" style="padding:8px 12px"><table class="results"><thead><tr><th>Postulante</th><th>Perfil</th><th>Creada</th><th>Estado</th><th>Enviar</th><th></th></tr></thead><tbody>'+
+    invs.map(i => '<tr><td><b>'+esc(i.name)+'</b><div class="small muted">'+esc(i.email||'')+(i.email&&i.phone?' · ':'')+esc(i.phone||'')+(!i.email&&!i.phone?esc(i.contact||''):'')+'</div></td><td>'+(i.profile==='internos'?'Internos':'Externos')+'<div class="small muted">'+(INT_LABEL[i.intensity]||'Evaluación')+'</div></td><td>'+fmtDate(i.createdAt)+'</td><td>'+(st[i.state]||esc(i.state))+'</td>'+
+      '<td style="white-space:nowrap"><button class="btn" data-msg="'+esc(i.code)+'">Copiar mensaje</button> '+(i.phone?'<button class="btn" data-wa="'+esc(i.code)+'">WhatsApp</button> ':'')+(i.email?'<button class="btn" data-gm="'+esc(i.code)+'">Gmail</button> ':'')+'<button class="btn link" data-copy="'+esc(i.code)+'">Copiar link</button></td>'+
+      '<td style="white-space:nowrap">'+(i.state!=='pendiente'?'<button class="btn" data-reset="'+esc(i.code)+'">Reactivar</button> ':'')+'<button class="btn danger" data-del="'+esc(i.code)+'">Eliminar</button></td></tr>').join('')+'</tbody></table></div>' : '<p class="muted">Todavía no hay invitaciones.</p>');
+  const byCode = c => invs.find(i => i.code===c);
+  $('#cr').onclick = async () => {
+    const name=$('#nm').value.trim(); if(name.length<3) return $('#msg').textContent='Escribe el nombre del postulante.';
+    const email=$('#em').value.trim(), phone=$('#ph').value.trim();
+    if(!email && !phone) return $('#msg').textContent='Escribe al menos el correo o el teléfono.';
+    try{ const inv = await api('/api/admin', { action:'invite', name, email, phone, profile:$('#pf').value, intensity:'evaluacion' });
+      S.data = await api('/api/admin?action=list'); await renderInvites(); $('#msg').textContent='Invitación creada para '+inv.name+'. Envíala con los botones de la lista.'; }
+    catch(e){ $('#msg').textContent='No se pudo crear la invitación.'; }
+  };
+  app.querySelectorAll('[data-msg]').forEach(b => b.onclick = async () => { await copy(inviteMessage(byCode(b.dataset.msg))); b.textContent='Copiado'; setTimeout(()=>b.textContent='Copiar mensaje',1500); });
+  app.querySelectorAll('[data-wa]').forEach(b => b.onclick = () => { const i=byCode(b.dataset.wa); window.open('https://wa.me/'+waNumber(i.phone)+'?text='+enc(inviteMessage(i)), '_blank', 'noopener'); });
+  app.querySelectorAll('[data-gm]').forEach(b => b.onclick = () => { const i=byCode(b.dataset.gm); window.open(gmailUrl(i.email, 'Tu prueba de ventas de Platzi', inviteMessage(i)), '_blank', 'noopener'); });
+  app.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => { await copy(inviteLink(b.dataset.copy)); b.textContent='Copiado'; setTimeout(()=>b.textContent='Copiar link',1500); });
+  app.querySelectorAll('[data-reset]').forEach(b => b.onclick = async () => { await api('/api/admin', { action:'resetInvite', code:b.dataset.reset }); S.data = await api('/api/admin?action=list'); renderInvites(); });
+  app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { if(!confirm('¿Eliminar esta invitación?')) return; await api('/api/admin', { action:'deleteInvite', code:b.dataset.del }); S.data = await api('/api/admin?action=list'); renderInvites(); });
+}
+async function copy(t){ try{ await navigator.clipboard.writeText(t); }catch(e){ prompt('Copia el link:', t); } }
+
+/* ============ CONFIGURACIÓN ============ */
+async function renderSettings(){
+  const pb=$('#pbody'); pb.innerHTML='<p class="muted">Cargando…</p>';
+  let r; try{ r = await api('/api/admin?action=settings'); }catch(e){ pb.innerHTML='<p class="err">No se pudo cargar la configuración.</p>'; return; }
+  const s=r.settings, D=r.defaults;
+  const f=(id,label,val,help,attrs)=>'<label for="'+id+'">'+label+'</label><input id="'+id+'" type="number" value="'+val+'" '+(attrs||'')+' style="width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)">'+(help?'<p class="small muted" style="margin:4px 0 0">'+help+'</p>':'');
+  const pair=(id,label,v,help,step)=>'<label>'+label+'</label><div class="row" style="flex-wrap:nowrap"><input id="'+id+'0" type="number" step="'+(step||1)+'" value="'+v[0]+'" aria-label="'+label+', mínimo" style="flex:1;min-width:0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)"><span class="muted">a</span><input id="'+id+'1" type="number" step="'+(step||1)+'" value="'+v[1]+'" aria-label="'+label+', máximo" style="flex:1;min-width:0;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)"></div>'+(help?'<p class="small muted" style="margin:4px 0 0">'+help+'</p>':'');
+  pb.innerHTML='<p class="muted">Los cambios se aplican a las pruebas que empiecen después de guardar. Las pruebas en curso no cambian.</p>'+
+    '<div class="grid2"><div class="box"><h2 style="margin-top:0">Duración</h2>'+
+      f('testMin','Duración de la prueba (minutos)',s.testMin,'Entre 5 y 30. Los 4 niveles se reparten en proporción: terminan al 20%, 45%, 70% y 100% del tiempo.','min="5" max="30"')+
+      f('extraMin','Tiempo extra por buena gestión (minutos)',s.extraMin,'Entre 0 y 10. Con 0 no se da tiempo extra.','min="0" max="10"')+
+      '<p class="small" id="cuts" style="margin-top:12px"></p></div>'+
+    '<div class="box"><h2 style="margin-top:0">Ritmo de los clientes</h2>'+
+      pair('gap','Segundos entre la llegada de un cliente nuevo y el siguiente',s.arrivalGapSec,'Más alto = llegan más espaciados. En el nivel 4 llegan un 20% más rápido.')+
+      pair('rd','Pausa del cliente antes de responder (segundos)',s.replyDelaySec,'Más alto = el cliente tarda más en contestar y la conversación va más pausada.','0.5')+
+      f('typing','Velocidad de escritura del cliente (milisegundos por letra)',s.typingMsPerChar,'30 es rápido; 80 se parece más a una persona escribiendo en el celular.','min="0" max="200"')+'</div>'+
+    '<div class="box"><h2 style="margin-top:0">Paciencia antes de molestarse (segundos)</h2>'+
+      [0,1,2,3].map(i=>f('pat'+i,'Nivel '+(i+1),s.patienceSec[i],'','min="15" max="900"')).join('')+'</div>'+
+    '<div class="box"><h2 style="margin-top:0">Compra</h2>'+
+      f('minBuy','Minutos mínimos de conversación para comprar',s.minBuyMin,'Aunque el postulante lo haga perfecto, el cliente no compra antes.','min="0.5" step="0.5"')+
+      f('typBuy','Minuto típico de compra con buena gestión',s.typicalBuyMin,'','min="0.5" step="0.5"')+
+      f('buyer','Clientes dispuestos a comprar en cada nivel (%)',s.buyerRatePct,'','min="0" max="100"')+'</div></div>'+
+    '<div class="row" style="margin-top:18px"><button class="btn primary" id="sv">Guardar configuración</button><button class="btn" id="df">Restaurar valores por defecto</button><span id="svm" class="small muted" role="status"></span></div>';
+  const cuts=()=>{ const t=Number($('#testMin').value)||10; $('#cuts').textContent='Cortes de nivel: '+[0.2,0.45,0.7,1].map(p=>mmss(t*60000*p)).join(', ')+'.'; };
+  $('#testMin').oninput=cuts; cuts();
+  const read=()=>({ testMin:+$('#testMin').value, extraMin:+$('#extraMin').value, arrivalGapSec:[+$('#gap0').value,+$('#gap1').value], replyDelaySec:[+$('#rd0').value,+$('#rd1').value],
+    typingMsPerChar:+$('#typing').value, patienceSec:[0,1,2,3].map(i=>+$('#pat'+i).value), minBuyMin:+$('#minBuy').value, typicalBuyMin:+$('#typBuy').value, buyerRatePct:+$('#buyer').value });
+  $('#sv').onclick=async()=>{ try{ await api('/api/admin',{ action:'saveSettings', settings:read() }); await renderSettings(); $('#svm').textContent='Configuración guardada. Se aplica a las próximas pruebas.'; }catch(e){ $('#svm').textContent='No se pudo guardar.'; } };
+  $('#df').onclick=async()=>{ if(!confirm('¿Restaurar todos los valores por defecto?')) return; try{ await api('/api/admin',{ action:'saveSettings', settings:D }); await renderSettings(); $('#svm').textContent='Valores por defecto restaurados.'; }catch(e){ $('#svm').textContent='No se pudo guardar.'; } };
+  // Precios
+  const P=r.prices, DP=r.defaultPrices, CUR={ USA:'USD (Estados Unidos)', USD:'USD (Ecuador, Panamá, El Salvador)' };
+  const inp=(cur,k,i,v)=>'<td><input type="number" min="0" step="any" data-cur="'+cur+'" data-k="'+k+'" data-i="'+i+'" value="'+v+'" aria-label="'+cur+' '+(k==='list'?'lista':'especial')+' '+['Expert','Duo','Groups'][i]+'" style="width:110px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);text-align:right"></td>';
+  pb.insertAdjacentHTML('beforeend', '<div class="box" style="margin-top:18px"><h2 style="margin-top:0">Precios</h2><p class="muted">El precio especial es el mínimo que el postulante puede ofrecer (descuento máximo del 15%). Los cambios aplican a las pruebas que empiecen después de guardar.</p>'+
+    '<div class="scroll-x"><table><thead><tr><th rowspan="2">Moneda</th><th colspan="3" style="text-align:center">Precio de lista</th><th colspan="3" style="text-align:center">Precio especial máximo</th></tr><tr><th>Expert</th><th>Duo</th><th>Groups</th><th>Expert</th><th>Duo</th><th>Groups</th></tr></thead><tbody>'+
+    Object.keys(P).map(cur=>'<tr><td>'+esc(CUR[cur]||cur)+'</td>'+P[cur].list.map((v,i)=>inp(cur,'list',i,v)).join('')+P[cur].disc.map((v,i)=>inp(cur,'disc',i,v)).join('')+'</tr>').join('')+'</tbody></table></div>'+
+    '<p id="pw" class="small" style="margin-top:10px"></p><div class="row" style="margin-top:10px"><button class="btn primary" id="psv">Guardar precios</button><button class="btn" id="pdf">Restaurar precios por defecto</button><span id="pm" class="small muted" role="status"></span></div></div>');
+  const readP=()=>{ const o={}; Object.keys(P).forEach(c=>o[c]={ list:[0,0,0], disc:[0,0,0] }); pb.querySelectorAll('input[data-cur]').forEach(x=>{ o[x.dataset.cur][x.dataset.k][+x.dataset.i]=Number(x.value); }); return o; };
+  const warn=()=>{ const o=readP(), bad=[]; Object.keys(o).forEach(c=>[0,1,2].forEach(i=>{ const l=o[c].list[i], d=o[c].disc[i]; if(d>l || d<l*0.849) bad.push(c+' '+['Expert','Duo','Groups'][i]); })); $('#pw').textContent = bad.length ? 'Revisa: el precio especial queda por encima del precio de lista o con más de 15% de descuento en '+bad.join(', ')+'.' : ''; $('#pw').className = bad.length ? 'small err' : 'small'; };
+  pb.querySelectorAll('input[data-cur]').forEach(x=>x.oninput=warn); warn();
+  $('#psv').onclick=async()=>{ try{ await api('/api/admin',{ action:'savePrices', prices:readP() }); $('#pm').textContent='Precios guardados.'; }catch(e){ $('#pm').textContent='No se pudieron guardar.'; } };
+  $('#pdf').onclick=async()=>{ if(!confirm('¿Restaurar los precios por defecto?')) return; try{ await api('/api/admin',{ action:'savePrices', prices:DP }); await renderSettings(); }catch(e){ $('#pm').textContent='No se pudieron guardar.'; } };
+}
+
+/* ============ RESULTADOS ============ */
+const REC = { pasa:['Pasa','avanzar'], no_pasa:['No pasa','descartar'] };
+const DEC = { aprobado:'Aprobado', no_aprobado:'No aprobado', pendiente:'En espera' };
+function recPill(sc){ if(!sc || !sc.recomendacion) return '<span class="muted">—</span>'; const e=REC[sc.recomendacion]; return '<span class="pill '+e[1]+'">'+e[0]+'</span>'; }
+function decLabel(d){ return d ? (DEC[d] || esc(d)) : '<span class="muted">Revisar</span>'; }
+/* ============ ASESORES ============ */
+function advisorLink(a){ return location.origin + '/asesor.html?k=' + a.token; }
+function advisorMessage(a){
+  const first=(a.name||'').trim().split(/\s+/)[0]||'';
+  return 'Hola, '+first+' 👋\n\nEste es tu link personal para practicar ventas en el simulador de Platzi:\n'+advisorLink(a)+'\n\nÁbrelo desde un computador. Puedes practicar cuantas veces quieras, pausar o finalizar cuando lo necesites, y al terminar cada práctica verás tu feedback.\n\nEste link es solo para ti, no lo compartas.\n\n¡A practicar!\nEquipo de Direct Sales de Platzi';
+}
+function advisorStats(a){
+  const ps=(S.data.practices||[]).filter(p=>p.advisorId===a.id);
+  const qs=ps.filter(p=>p.status==='evaluada'&&p.score&&p.score.parts&&p.score.parts.calidad!=null).map(p=>p.score.parts.calidad);
+  return { ps, count:ps.length, avg: qs.length?Math.round(qs.reduce((x,y)=>x+y,0)/qs.length):null, last: ps.length?ps[0].createdAt:null };
+}
+function renderAdvisors(){
+  const as=S.data.advisors||[];
+  $('#pbody').innerHTML='<div class="grid2"><div class="box"><h2 style="margin-top:0">Nuevo asesor</h2>'+
+    '<label for="an">Nombre</label><input id="an" type="text" autocomplete="off">'+
+    '<label for="ae">Correo</label><input id="ae" type="text" inputmode="email" autocomplete="off">'+
+    '<label for="ap">Teléfono de WhatsApp</label><input id="ap" type="text" inputmode="tel" autocomplete="off" placeholder="+57 300 123 4567">'+
+    '<label for="af">Perfil</label><select id="af"><option value="externos">Externos</option><option value="internos">Internos</option></select>'+
+    '<p id="amsg" class="small" role="status"></p><div class="row"><button class="btn primary" id="acr">Crear asesor</button></div></div>'+
+    '<div class="box"><h2 style="margin-top:0">Cómo funciona</h2><p>Cada asesor recibe un <b>link personal</b> a su panel. Desde ahí inicia prácticas cuando quiera, sin límite, y ve su feedback.</p><p>En la práctica, los clientes llegan transferidos por el bot con una objeción, como en la operación real. Aquí ves todas sus prácticas y su evolución.</p></div></div>'+
+    '<h2>Asesores</h2>'+(as.length?'<div class="box scroll-x" style="padding:8px 12px"><table class="results"><thead><tr><th>Asesor</th><th>Prácticas</th><th>Calidad promedio</th><th>Última práctica</th><th>Enviar link</th></tr></thead><tbody>'+
+      as.map(a=>{ const st=advisorStats(a); return '<tr data-aid="'+esc(a.id)+'" tabindex="0"><td><b>'+esc(a.name)+'</b>'+(a.active===false?' <span class="pill descartar">desactivado</span>':'')+'<div class="small muted">'+(a.profile==='internos'?'Internos':'Externos')+'</div></td><td>'+st.count+'</td><td>'+(st.avg==null?'—':'<b>'+st.avg+'%</b>')+'</td><td>'+fmtDate(st.last)+'</td>'+
+        '<td style="white-space:nowrap"><button class="btn" data-amsg="'+esc(a.id)+'">Copiar mensaje</button> '+(a.phone?'<button class="btn" data-awa="'+esc(a.id)+'">WhatsApp</button> ':'')+(a.email?'<button class="btn" data-agm="'+esc(a.id)+'">Gmail</button>':'')+'</td></tr>'; }).join('')+'</tbody></table></div>':'<p class="muted">Todavía no hay asesores.</p>');
+  const byId=id=>as.find(a=>a.id===id);
+  $('#acr').onclick=async()=>{ const name=$('#an').value.trim(); if(name.length<3) return $('#amsg').textContent='Escribe el nombre del asesor.';
+    try{ await api('/api/admin',{ action:'advisor', name, email:$('#ae').value.trim(), phone:$('#ap').value.trim(), profile:$('#af').value }); S.data=await api('/api/admin?action=list'); renderAdvisors(); $('#amsg').textContent='Asesor creado. Envíale su link con los botones de la lista.'; }
+    catch(e){ $('#amsg').textContent='No se pudo crear el asesor.'; } };
+  const stop=e=>e.stopPropagation();
+  app.querySelectorAll('[data-amsg]').forEach(b=>b.onclick=async e=>{ stop(e); await copy(advisorMessage(byId(b.dataset.amsg))); b.textContent='Copiado'; setTimeout(()=>b.textContent='Copiar mensaje',1500); });
+  app.querySelectorAll('[data-awa]').forEach(b=>b.onclick=e=>{ stop(e); const a=byId(b.dataset.awa); window.open('https://wa.me/'+waNumber(a.phone)+'?text='+enc(advisorMessage(a)),'_blank','noopener'); });
+  app.querySelectorAll('[data-agm]').forEach(b=>b.onclick=e=>{ stop(e); const a=byId(b.dataset.agm); window.open(gmailUrl(a.email,'Tu link de práctica en el simulador de ventas de Platzi',advisorMessage(a)),'_blank','noopener'); });
+  app.querySelectorAll('tr[data-aid]').forEach(tr=>{ const go=()=>{ S.advisor=tr.dataset.aid; renderAdvisor(S.advisor); }; tr.onclick=go; tr.onkeydown=e=>{ if(e.key==='Enter') go(); }; });
+}
+function renderAdvisor(id){
+  const a=(S.data.advisors||[]).find(x=>x.id===id); if(!a){ S.advisor=null; return renderAdvisors(); }
+  const st=advisorStats(a);
+  const quals=st.ps.slice().reverse().filter(p=>p.status==='evaluada'&&p.score&&p.score.parts&&p.score.parts.calidad!=null);
+  $('#pbody').innerHTML='<div class="row" style="margin-bottom:14px"><button class="btn" id="abk">‹ Volver a asesores</button></div>'+
+    '<div class="box"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h1 style="margin-bottom:4px">'+esc(a.name)+'</h1><div class="muted">'+esc(a.email||'')+(a.email&&a.phone?' · ':'')+esc(a.phone||'')+'</div><div class="small muted">Perfil '+(a.profile==='internos'?'Internos':'Externos')+(a.active===false?', desactivado':'')+'</div></div>'+
+    '<div style="text-align:right"><div class="score"><b>'+(st.avg==null?'—':st.avg+'%')+'</b></div><div class="small muted">calidad promedio en '+st.count+' práctica(s)</div></div></div>'+
+    (quals.length>1?'<h3>Evolución de la calidad</h3>'+quals.map((p,i)=>'<div class="bar"><div class="lbl"><span>Práctica '+(i+1)+', '+fmtDate(p.createdAt)+'</span><b>'+p.score.parts.calidad+'%</b></div><div class="trk"><div class="fill" style="width:'+p.score.parts.calidad+'%"></div></div></div>').join(''):'')+
+    '<div class="row" style="margin-top:14px"><button class="btn" id="acp">Copiar link personal</button><button class="btn" id="anl">Generar link nuevo</button><button class="btn danger" id="atg">'+(a.active===false?'Reactivar':'Desactivar')+'</button></div></div>'+
+    '<h2>Prácticas</h2>'+(st.ps.length?'<div class="box scroll-x" style="padding:8px 12px"><table class="results"><thead><tr><th>Fecha</th><th>Duración</th><th>Calidad</th><th>Ventas</th><th>Pausas</th><th>Estado</th></tr></thead><tbody>'+
+      st.ps.map(p=>'<tr data-psid="'+esc(p.sid)+'" tabindex="0"><td>'+fmtDate(p.createdAt)+'</td><td>'+mmss(p.durationMs)+'</td><td>'+(p.status==='evaluada'&&p.score&&p.score.parts&&p.score.parts.calidad!=null?'<b>'+p.score.parts.calidad+'%</b>':'<span class="muted">Sin evaluar</span>')+'</td><td>'+(p.sales??0)+'</td><td>'+(p.pauses||0)+'</td><td>'+(p.status==='evaluada'?'Evaluada':'Sin evaluar')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">Todavía no ha hecho prácticas.</p>');
+  $('#abk').onclick=()=>{ S.advisor=null; renderAdvisors(); };
+  $('#acp').onclick=async()=>{ await copy(advisorLink(a)); $('#acp').textContent='Copiado'; setTimeout(()=>$('#acp').textContent='Copiar link personal',1500); };
+  $('#anl').onclick=async()=>{ if(!confirm('El link anterior dejará de funcionar. ¿Generar uno nuevo?')) return; await api('/api/admin',{ action:'advisorNewLink', id:a.id }); S.data=await api('/api/admin?action=list'); renderAdvisor(id); };
+  $('#atg').onclick=async()=>{ await api('/api/admin',{ action:'advisorToggle', id:a.id }); S.data=await api('/api/admin?action=list'); renderAdvisor(id); };
+  app.querySelectorAll('tr[data-psid]').forEach(tr=>{ const go=()=>{ S.detail=tr.dataset.psid; renderDetail(S.detail); }; tr.onclick=go; tr.onkeydown=e=>{ if(e.key==='Enter') go(); }; });
+}
+
+function renderResults(){
+  const rs = S.data.results || [];
+  if(!rs.length){ $('#pbody').innerHTML='<div class="box"><p>Todavía no hay pruebas terminadas. Crea una invitación en la pestaña Invitaciones.</p></div>'; return; }
+  $('#pbody').innerHTML = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><span id="evst" class="small muted" role="status"></span><span class="row"><button class="btn" id="xl">Exportar a Excel</button><button class="btn" id="rf">Actualizar</button></span></div>'+
+    '<div class="box scroll-x" style="padding:8px 12px"><table class="results"><thead><tr><th>Postulante</th><th>Perfil</th><th>Fecha</th><th>Puntaje</th><th>Recomendación</th><th>Nivel</th><th>Ventas</th><th>Alerta</th><th>Decisión</th></tr></thead><tbody>'+
+    rs.map(r => { const sc=r.score||{}; const ev=r.status==='evaluada'; return '<tr data-sid="'+esc(r.sid)+'" tabindex="0"><td><b>'+esc(r.name)+'</b><div class="small muted">'+esc(r.email||r.contact||'')+'</div></td><td>'+(r.profile==='internos'?'Internos':'Externos')+'<div class="small muted">'+(INT_LABEL[r.intensity]||'Evaluación')+'</div></td><td>'+fmtDate(r.createdAt)+'</td>'+
+      '<td>'+(ev?'<b>'+sc.total+'</b>':'<span class="muted">Sin evaluar</span>')+'</td><td>'+(ev?recPill(sc):'—')+'</td><td>'+r.levelReached+' de 4'+(r.extraGranted?' <span class="xtag">extra</span>':'')+'</td>'+
+      '<td>'+(r.sales??'—')+' <span class="small muted">('+(r.buyersSeen??0)+' dispuestos)</span></td><td>'+(sc.alert?'<span class="pill '+sc.alert.level+'">'+sc.alert.level+'</span>':'—')+'</td><td>'+decLabel(r.decision)+'</td></tr>'; }).join('')+'</tbody></table></div>';
+  $('#rf').onclick = renderPanel;
+  $('#xl').onclick = () => exportCsv(rs);
+  app.querySelectorAll('tbody tr').forEach(tr => { const go=()=>{ S.detail=tr.dataset.sid; renderDetail(S.detail); }; tr.onclick=go; tr.onkeydown=e=>{ if(e.key==='Enter') go(); }; });
+  autoEvaluate(rs.filter(r => r.status!=='evaluada').map(r=>r.sid));
+}
+function exportCsv(rs){
+  const cell = v => { const t = v==null ? '' : String(v); return /[;"\n]/.test(t) ? '"'+t.replace(/"/g,'""')+'"' : t; };
+  const head = ['Nombre','Correo','Teléfono','Perfil','Intensidad','Fecha','Puntaje','Calidad Aura (%)','Recomendación','Alerta de integridad','Nivel alcanzado','Ventas','Clientes dispuestos','Tiempo extra','Decisión','Notas'];
+  const rows = rs.map(r => { const sc=r.score||{}; const ev=r.status==='evaluada'; return [r.name, r.email||'', r.phone||'', r.profile==='internos'?'Internos':'Externos', INT_LABEL[r.intensity]||'Evaluación', fmtDate(r.createdAt), ev?sc.total:'', ev&&sc.parts?sc.parts.calidad:'', ev&&sc.recomendacion?REC[sc.recomendacion][0]:'Sin evaluar', sc.alert?sc.alert.level:'', r.levelReached, r.sales, r.buyersSeen, r.extraGranted?'Sí':'No', r.decision?DEC[r.decision]:'Revisar', r.notes||'']; });
+  const csv = '\ufeff' + [head].concat(rows).map(r => r.map(cell).join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+  a.download = 'resultados-simulador-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+async function autoEvaluate(sids){
+  for(const sid of sids){
+    if(S.evaluating[sid]) continue;
+    const st=$('#evst'); if(st) st.textContent='Evaluando pruebas pendientes con IA… no cierres esta página.';
+    await evaluate(sid, () => {});
+  }
+  if(sids.length && S.tab==='res' && !S.detail){ S.data = await api('/api/admin?action=list'); renderResults(); }
+}
+async function evaluate(sid, onStep){
+  if(S.evaluating[sid]) return S.evaluating[sid];
+  S.evaluating[sid] = (async () => {
+    try{
+      const d = await api('/api/admin?action=result&sid='+encodeURIComponent(sid));
+      const done = (d.evaluation && d.evaluation.convs) || {};
+      const todo = d.conversations.filter(c => c.msgs.some(m=>m.f==='v') && !done[c.id]);
+      let i=0;
+      for(const c of todo){ i++; onStep('Evaluando conversación '+i+' de '+todo.length+'…'); await api('/api/evaluate', { sid, part:'conv', cid:c.id }); }
+      onStep('Preparando el resumen y los borradores de correo…');
+      await api('/api/evaluate', { sid, part:'summary' });
+      return true;
+    }catch(e){ onStep('La evaluación se detuvo ('+(e.code||'error')+'). Vuelve a intentarlo en unos minutos.'); return false; }
+    finally{ delete S.evaluating[sid]; }
+  })();
+  return S.evaluating[sid];
+}
+function bar(label, v, w){ return '<div class="bar"><div class="lbl"><span>'+label+(w?' <span class="muted small">('+w+'%)</span>':'')+'</span><b>'+(v==null?'—':v+(w===''?'%':''))+'</b></div><div class="trk"><div class="fill" style="width:'+(v||0)+'%"></div></div></div>'; }
+const list = a => (a||[]).filter(Boolean).map(x=>'<li>'+esc(x)+'</li>').join('');
+async function renderDetail(sid){
+  const pb=$('#pbody'); pb.innerHTML='<p class="muted">Cargando…</p>';
+  let d; try{ d = await api('/api/admin?action=result&sid='+encodeURIComponent(sid)); }catch(e){ pb.innerHTML='<p class="err">No se encontró este resultado.</p>'; return; }
+  const m=d.metrics, sc=d.score||{}, ev=d.evaluation||{}, ce=ev.convs||{}, sum=ev.summary;
+  const evaluated = d.status==='evaluada';
+  const mins = Math.round((d.testSec||600)/60);
+  let h='<div class="row" style="margin-bottom:14px"><button class="btn" id="bk">‹ Volver'+(d.kind==='practica'?' al asesor':' a resultados')+'</button></div>';
+  h+='<div class="box"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h1 style="margin-bottom:4px">'+esc(d.name)+'</h1><div class="muted">'+esc(d.email||d.contact||'')+(d.phone?' · '+esc(d.phone):'')+'</div><div class="muted small">'+fmtDate(d.createdAt)+', perfil '+(d.profile==='internos'?'Internos':'Externos')+', '+(INT_LABEL[d.intensity]||'Evaluación').toLowerCase()+', prueba de '+mins+' min, duración real '+mmss(d.durationMs)+(d.extraGranted?', recibió tiempo extra':'')+'</div></div>'+
+    '<div style="text-align:right"><div class="score"><b>'+(evaluated?sc.total:'—')+'</b><span class="muted">/ 100</span></div>'+(d.kind==='practica' ? '<div style="margin-top:6px"><b>Práctica de asesor</b>'+(d.pauses?', '+d.pauses+' pausa(s)':'')+'</div>' : '<div style="margin-top:6px">Decisión: <b>'+decLabel(d.decision)+'</b></div>')+'</div></div>';
+  if(evaluated && d.kind!=='practica') h+='<div class="note" style="margin-top:14px"><b>Recomendación del sistema:</b> '+recPill(sc)+(sc.critical?' <span class="pill descartar">'+sc.critical+' error(es) crítico(s)</span>':'')+(sum&&sum.por_que?'<p style="margin:8px 0 0">'+esc(sum.por_que)+'</p>':'')+'<p class="small muted" style="margin:6px 0 0">Es una sugerencia. La decisión final es tuya.</p></div>';
+  else h+='<p class="note" id="evn">Esta prueba aún no está evaluada. <button class="btn" id="ev">Evaluar ahora</button></p>';
+  h+='</div>';
+  if(sum){
+    h+='<div class="grid2" style="margin-top:16px"><div class="box"><h2 style="margin-top:0">Fortalezas</h2><ul class="clean">'+list(sum.fortalezas)+'</ul><h2>A mejorar</h2><ul class="clean">'+list(sum.a_mejorar||sum.errores)+'</ul></div>'+
+      '<div class="box"><h2 style="margin-top:0">Resumen</h2><p>'+esc(sum.resumen||'')+'</p>'+((sum.entrenar||[]).filter(Boolean).length?'<h2>Qué debería entrenar</h2><ul class="clean">'+list(sum.entrenar)+'</ul>':'')+'</div></div>';
+  }
+  if(evaluated){
+    const dimAvg = DIMS.map(([k,l]) => { const ps=Object.values(ce).map(e=>e&&e.dimensiones&&e.dimensiones[k]&&e.dimensiones[k].p).filter(p=>p===0||p===1||p===2); return [l, ps.length?Math.round(ps.reduce((s,p)=>s+p,0)/(2*ps.length)*100):null]; });
+    h+='<div class="grid2" style="margin-top:16px"><div class="box"><h2 style="margin-top:0">Puntaje por dimensión</h2>'+Object.keys(WEIGHTS).map(k=>bar(PART_LABELS[k], sc.parts&&sc.parts[k], WEIGHTS[k])).join('')+'</div>'+
+      '<div class="box"><h2 style="margin-top:0">Matriz de Aura (promedio)</h2>'+dimAvg.map(([l,v])=>bar(l,v,'')).join('')+'</div></div>';
+  }
+  if(sum && Array.isArray(sum.ortografia_errores)){
+    const errs = sum.ortografia_errores.filter(x=>x && x.texto);
+    const T = { grave:'Palabra mal escrita', tilde:'Tilde', abreviatura:'Abreviatura', puntuacion:'Puntuación' };
+    h+='<div class="box" style="margin-top:16px"><h2 style="margin-top:0">Ortografía</h2><p>Puntaje: <b>'+(sum.ortografia??'—')+'</b> de 100'+(sum.mensajes_con_errores_pct!=null?'. Mensajes con al menos un error: <b>'+sum.mensajes_con_errores_pct+'%</b>':'')+'.</p>'+
+      (errs.length?'<div class="scroll-x"><table><thead><tr><th>Escribió</th><th style="text-align:left">Corrección</th><th style="text-align:left">Tipo</th></tr></thead><tbody>'+errs.map(x=>'<tr><td style="text-align:left">'+esc(x.texto)+'</td><td style="text-align:left">'+esc(x.correccion||'')+'</td><td style="text-align:left">'+esc(T[x.tipo]||x.tipo||'')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="muted">No se encontraron errores.</p>')+'</div>';
+  }
+  h+='<div class="box" style="margin-top:16px"><h2 style="margin-top:0">Métricas clave</h2><dl class="kv">'+
+    '<dt>Nivel alcanzado</dt><dd>'+m.levelReached+' de 4</dd><dt>Ventas (el cliente pagó)</dt><dd>'+m.sales+(m.salesInExtra?' ('+m.salesInExtra+' en tiempo extra)':'')+'</dd>'+
+    '<dt>Dijo que compraba pero no recibió link</dt><dd>'+(m.intencion||0)+'</dd><dt>Link enviado sin pago</dt><dd>'+(m.linkSinPago||0)+'</dd><dt>Links de pago enviados</dt><dd>'+(m.linksSent||0)+(m.linkIssues&&m.linkIssues.length?' <span class="err">('+m.linkIssues.length+' con errores)</span>':'')+'</dd>'+
+    '<dt>Clientes dispuestos que llegaron</dt><dd>'+m.buyersSeen+'</dd>'+(m.routingSeen?'<dt>Transferencias correctas (Soporte o SMB)</dt><dd>'+m.routedOk+' de '+m.routingSeen+'</dd>':'')+(m.wrongTransfers?'<dt>Transferencias equivocadas</dt><dd class="err">'+m.wrongTransfers+'</dd>':'')+
+    '<dt>Clientes atendidos</dt><dd>'+m.attended+' de '+m.arrived+'</dd><dt>Se molestaron por demora</dt><dd>'+m.annoyed+(m.annoyed?' (retomó '+m.annoyedRecovered+')':'')+'</dd>'+
+    '<dt>Dijeron "lo voy a pensar"</dt><dd>'+m.thinkers+' (insistió con '+m.thinkersPushed+', convirtió '+m.thinkersConverted+')</dd>'+
+    '<dt>Fantasmas recuperados</dt><dd>'+m.ghostsRecovered+' de '+m.ghosts+'</dd><dt>Volvieron y compraron</dt><dd>'+m.reactConverted+' de '+m.reactivated+'</dd>'+
+    '<dt>Respuesta mediana</dt><dd>'+secs(m.medianRt)+'</dd><dt>Mensajes enviados</dt><dd>'+m.vCount+'</dd><dt>Longitud promedio</dt><dd>'+(m.avgLen==null?'—':m.avgLen+' caracteres')+'</dd>'+
+    '<dt>Mensajes de más de 250 caracteres</dt><dd>'+(m.over250+m.over400)+'</dd></dl></div>';
+  if(m.linkIssues && m.linkIssues.length) h+='<div class="box" style="margin-top:16px"><h2 style="margin-top:0">Errores en los links de pago</h2><ul class="clean">'+m.linkIssues.map(x=>'<li><b>'+esc(x.c)+'</b>: '+esc(x.link)+'. <span class="err">'+x.issues.map(esc).join(' ')+'</span></li>').join('')+'</ul></div>';
+  const al=sc.alert||{level:'bajo'};
+  const cl = sum && Array.isArray(sum.pegados_clasificados) ? sum.pegados_clasificados : [];
+  const fixedRe = /https?:\/\/|www\.|\.com|\$\s?\d|\d[\d.,]{2,}\s?(cop|mxn|usd|clp|pen|ars|eur)?|pse|paypal|cuotas/i;
+  h+='<div class="box" style="margin-top:16px"><h2 style="margin-top:0">Integridad <span class="pill '+al.level+'">alerta '+al.level+'</span></h2>'+
+    '<h3>Textos pegados ('+m.pastes.length+')</h3>'+(m.pastes.length?'<ul class="clean">'+m.pastes.map((p,i)=>{ const t=fixedRe.test(p.x)?'dato_fijo':(cl.find(x=>x&&x.idx===i)||{}).tipo; return '<li><b>'+esc(p.c)+'</b>, '+p.len+' caracteres'+(t?', '+(t==='dato_fijo'?'precio, link o dato del producto (no se penaliza)':'argumento de venta copiado (se penaliza)'):'')+': <span class="muted">'+esc(p.x)+'</span></li>'; }).join('')+'</ul>':'<p class="muted">Ninguno.</p>')+
+    '<h3>Escritura a velocidad imposible ('+m.fast.length+')</h3>'+(m.fast.length?'<ul class="clean">'+m.fast.map(x=>'<li><b>'+esc(x.c)+'</b>, '+x.len+' caracteres en '+x.s+' s: <span class="muted">'+esc(x.x)+'</span></li>').join('')+'</ul>':'<p class="muted">Ninguna.</p>')+
+    '<h3>Volvió de otra pestaña y envió un texto largo ('+m.returnSend.length+')</h3>'+(m.returnSend.length?'<ul class="clean">'+m.returnSend.map(x=>'<li><b>'+esc(x.c)+'</b>: <span class="muted">'+esc(x.x)+'</span></li>').join('')+'</ul>':'<p class="muted">Ninguno.</p>')+
+    '<h3>Respuestas recicladas ('+m.recycled.length+')</h3>'+(m.recycled.length?'<ul class="clean">'+m.recycled.map(x=>'<li><b>'+esc(x.a)+'</b> y <b>'+esc(x.b)+'</b>: <span class="muted">'+esc(x.x)+'</span></li>').join('')+'</ul>':'<p class="muted">Ninguna.</p>')+
+    '<h3>Salidas de la pestaña</h3><p>'+m.awayCount+' veces, '+secs(m.awayMs/1000)+' en total.</p>'+
+    (sum&&typeof sum.estilo_ia==='number'?'<h3>Probabilidad de estilo de IA: '+sum.estilo_ia+'%</h3>'+((sum.evidencia_ia||[]).filter(Boolean).length?'<ul class="clean">'+list(sum.evidencia_ia)+'</ul>':''):'')+
+    '<p class="small muted">Estas señales son indicios, no pruebas. Revisa la evidencia antes de decidir.</p></div>';
+  // Decisión y correo
+  if(d.kind!=='practica') h+='<div class="box" style="margin-top:16px"><h2 style="margin-top:0">Decisión y correo al postulante</h2><div class="row"><select id="dec" style="max-width:260px"><option value="">Revisar (sin decisión)</option><option value="aprobado"'+(d.decision==='aprobado'?' selected':'')+'>Aprobado</option><option value="no_aprobado"'+(d.decision==='no_aprobado'?' selected':'')+'>No aprobado</option><option value="pendiente"'+(d.decision==='pendiente'?' selected':'')+'>En espera</option></select></div>'+
+    '<label for="nt">Notas internas (no se envían al postulante)</label><textarea id="nt" rows="3" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)">'+esc(d.notes||'')+'</textarea>'+
+    '<div id="mail" style="margin-top:14px"></div>'+
+    '<div class="row" style="margin-top:12px"><button class="btn primary" id="sv">Guardar decisión</button><span id="svm" class="small muted" role="status"></span></div></div>';
+  h+='<h2>Conversaciones</h2>';
+  d.conversations.filter(c=>c.arrivedAt!=null).forEach(c => {
+    const e=ce[c.id];
+    const tags=[c.transfer?'transferido a '+(c.transfer==='smb'?'SMB':'Soporte'):null, c.buyerEver&&!c.routing?'dispuesto a comprar':null, c.payIssue&&c.buyerEver?'inconveniente: '+(PAY_ISSUE_LABEL[c.payIssue]||c.payIssue):null, c.routing?(c.routing==='smb'?'caso para SMB':'caso para Soporte'):null, c.ghost?'fantasma':null, c.annoyed?'se molestó':null, c.reactivated?'volvió a escribir':null, c.extra?'tiempo extra':null].filter(Boolean);
+    h+='<details class="conv"><summary><b>'+esc(c.id)+'</b><span>Nivel '+c.level+'</span><span>'+esc(c.name)+', '+esc(c.country)+'</span><span class="pill '+(c.status==='compro'||(c.status==='transferido'&&c.routing)?'avanzar':c.status==='sin_respuesta'?'descartar':'revisar')+'">'+(STATUS_LABEL[c.status]||esc(c.status))+(c.plan?' '+esc(c.plan):'')+'</span>'+(e&&e.calidad!=null?'<span>Calidad '+e.calidad+'%</span>':'')+tags.map(t=>'<span class="small muted">'+t+'</span>').join('')+'</summary><div class="inner">'+
+      '<p class="small muted">'+esc(c.occupation)+'; quiere '+esc(c.goal)+'. Temperamento: '+esc(c.temp)+'. Objeciones: '+c.obj.map(o=>OBJ_LABEL[o]||o).join(', ')+'.</p>';
+    if(e){
+      h+='<div class="scroll-x"><table><thead><tr><th>Dimensión</th><th>Puntaje</th><th style="text-align:left">Evidencia</th></tr></thead><tbody>'+DIMS.map(([k,l])=>{ const x=(e.dimensiones||{})[k]||{}; return '<tr><td>'+l+'</td><td>'+(x.p==null?'No aplica':x.p+' de 2')+'</td><td style="text-align:left;white-space:normal">'+esc(x.nota||'')+'</td></tr>'; }).join('')+'</tbody></table></div>';
+      if((e.errores_criticos||[]).filter(Boolean).length) h+='<p class="err">Errores críticos: '+e.errores_criticos.filter(Boolean).map(esc).join('; ')+'</p>';
+      if((e.objeciones_detalle||[]).length) h+='<ul class="clean small">'+e.objeciones_detalle.filter(Boolean).map(o=>'<li><b>'+esc(o.objecion)+'</b>: '+esc({si:'rebatida',parcial:'rebatida a medias',no:'no rebatida',no_planteada:'no se planteó'}[o.rebatida]||o.rebatida)+(o.nota?'. '+esc(o.nota):'')+'</li>').join('')+'</ul>';
+      h+='<p class="small">Moneda correcta: '+(e.moneda_correcta==null?'no dio precios':e.moneda_correcta?'sí':'<b class="err">no</b>')+'. Precio especial: '+esc(e.descuento||'—')+'. Upsell: '+esc(e.upsell||'—')+'. Transferencia: '+esc(e.enrutamiento||'—')+'.</p><p>'+esc(e.comentario||'')+'</p>';
+    }
+    h+=c.msgs.map(x=> x.f==='s' ? '<div class="tr"><span class="t">'+mmss(x.t)+'</span><i>'+esc(x.x)+'</i></div>' : '<div class="tr '+(x.f==='v'?'v':'')+'"><span class="t">'+mmss(x.t)+'</span><b>'+(x.f==='c'?'Cliente':x.f==='b'?'Bot de Platzi':(d.kind==='practica'?'Asesor':'Postulante'))+':</b> '+esc(x.x)+(x.p?'<span class="flag">PEGADO</span>':'')+(x.push?' <span class="small muted">(seguimiento)</span>':'')+'</div>').join('');
+    h+='</div></details>';
+  });
+  h+='<div class="row" style="margin-top:24px"><button class="btn danger" id="del">Eliminar este resultado</button></div>';
+  pb.innerHTML=h;
+  const field = 'width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)';
+  const renderMail = () => {
+    const dec=$('#dec').value, box=$('#mail');
+    if(dec!=='aprobado' && dec!=='no_aprobado'){ box.innerHTML=''; return; }
+    const saved = d.emailDraft && d.emailDraft.tipo===dec ? d.emailDraft : null;
+    const base = sum ? (dec==='aprobado' ? sum.correo_aprobado : sum.correo_no_aprobado) : null;
+    const draft = saved || base || { asunto:'', cuerpo:'' };
+    box.innerHTML = '<h3 style="margin-top:0">Correo para '+esc(d.name)+(dec==='aprobado'?' (aprobado)':' (no aprobado)')+'</h3>'+(base||saved?'<p class="small muted">Borrador redactado con base en su desempeño. Revísalo y ajústalo antes de enviarlo.</p>':'<p class="small muted">Aún no hay borrador: evalúa la prueba primero o escríbelo tú.</p>')+
+      '<label for="as">Asunto</label><input id="as" type="text" value="'+esc(draft.asunto||'')+'" style="'+field+'">'+
+      '<label for="cu">Mensaje</label><textarea id="cu" rows="12" style="'+field+'">'+esc(draft.cuerpo||'')+'</textarea>'+
+      '<div class="row" style="margin-top:10px"><button class="btn" id="cpm">Copiar correo</button>'+(d.email?'<button class="btn" id="gm">Abrir en Gmail</button>':'<span class="small muted">No hay correo registrado para este postulante; usa Copiar correo.</span>')+'</div>';
+    $('#cpm').onclick = async () => { await copy($('#as').value+'\n\n'+$('#cu').value); $('#cpm').textContent='Copiado'; setTimeout(()=>$('#cpm').textContent='Copiar correo',1500); };
+    const g=$('#gm'); if(g) g.onclick = () => window.open(gmailUrl(d.email, $('#as').value, $('#cu').value), '_blank', 'noopener');
+  };
+  if($('#dec')){ $('#dec').onchange = renderMail; renderMail(); }
+  $('#bk').onclick = () => { S.detail=null; renderPanel(); };
+  const evb=$('#ev'); if(evb) evb.onclick = async () => { evb.disabled=true; const ok = await evaluate(sid, t => { const n=$('#evn'); if(n) n.firstChild.textContent=t+' '; }); if(ok) renderDetail(sid); else evb.disabled=false; };
+  if($('#sv')) $('#sv').onclick = async () => {
+    const dec=$('#dec').value, draft = $('#as') ? { asunto:$('#as').value, cuerpo:$('#cu').value } : null;
+    try{ await api('/api/admin', { action:'decision', sid, decision:dec, notes:$('#nt').value, emailDraft:draft }); d.decision=dec||null; if(draft) d.emailDraft=Object.assign({ tipo:dec }, draft); $('#svm').textContent='Decisión guardada.'; }
+    catch(e){ $('#svm').textContent='No se pudo guardar.'; }
+  };
+  $('#del').onclick = async () => { if(!confirm('¿Eliminar el resultado de '+d.name+'? No se puede deshacer.')) return; await api('/api/admin', { action:'deleteResult', sid }); S.detail=null; renderPanel(); };
+}
+init();
+})();
 </script>
 </body>
 </html>

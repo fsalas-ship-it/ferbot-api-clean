@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prueba de ventas Platzi</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div id="app"><div class="screen"><div class="card"><p class="muted">Cargando…</p></div></div></div>
+<script>
+(function(){
+'use strict';
+const $ = (s, r=document) => r.querySelector(s);
+const app = document.getElementById('app');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const rand = (a,b) => a + Math.random()*(b-a);
+const shuffle = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mmss = ms => { ms=Math.max(0,ms); const t=Math.ceil(ms/1000); return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); };
+const initials = n => n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const isMobile = () => window.matchMedia('(max-width:760px)').matches;
+const BRAND = '<div class="brandline"><span class="mark">P</span><span>Prueba de ventas Platzi</span></div>';
+const NUDGES = ['hola?','sigues ahí?','??','me vas a responder?','holaa'];
+const ANNOY = ['bueno, veo que no te interesa atenderme','llevo rato esperando…','uff, qué mala atención','ya casi que no quiero nada la verdad','hola?? nadie responde aquí o qué'];
+const REACT_OPEN = ['hola de nuevo, estuve pensando lo de platzi','hola! sigue en pie lo que me dijiste?','ey, ya hablé en mi casa, cómo era lo de las cuotas?','hola, me quedé pensando en lo que me dijiste','buenas, sigo interesado, me recuerdas los precios?'];
+const DONE = new Set(['compro','no_compro','transferido','enrutado','sin_cerrar','lo_pensare','sin_respuesta','cerrada_tiempo','intencion','link_enviado']);
+const DEST = { soporte:'Soporte', smb:'SMB (empresas)' };
+const OPEN = s => s==='abierta' || s==='comprando';
+const hasLink = c => c.msgs.some(m => m.f==='v' && /\/pago(\.html\?p=|\/)(expert|duo|groups)-/i.test(m.x));
+const buyEnd = c => hasLink(c) ? 'link_enviado' : 'intencion';
+const code = (new URLSearchParams(location.search).get('c') || '').toUpperCase().trim();
+const pk = (new URLSearchParams(location.search).get('k') || '').trim();
+const PRAC = !!pk;
+const S = { test:null, ac:null };
+const RT = {};
+
+async function api(path, body){
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type':'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(!r.ok){ const e = new Error(j.error || ('http_'+r.status)); e.code = j.error || ('http_'+r.status); e.message2 = j.message; throw e; }
+  return j;
+}
+function shell(inner){ app.innerHTML = '<div class="screen"><div class="card">'+inner+'</div></div>'; }
+
+/* ============ BIENVENIDA ============ */
+async function initPractice(){
+  let info;
+  try{ info = await api('/api/practice?k='+encodeURIComponent(pk)); }
+  catch(e){ shell(BRAND+'<h1>Link no válido</h1><p>Este link de práctica no es válido o fue desactivado. Pide uno nuevo a tu líder.</p>'); return; }
+  const saved = loadLocal();
+  if(saved){ renderResume(info.advisor.name, saved); return; }
+  if(isPhone()){ shell(BRAND+'<h1>Usa un computador</h1><p>La práctica debe hacerse desde un computador. Abre este mismo link desde tu computador.</p>'); return; }
+  const first = (info.advisor.name||'').split(' ')[0];
+  shell(BRAND+'<h1>Práctica de ventas'+(first?', '+esc(first):'')+'</h1>'+
+    '<p>Vas a atender clientes que ya hablaron con el bot de Platzi y presentaron una objeción. El bot te los transfiere a ti.</p>'+
+    '<ul class="rules">'+
+    '<li><b>Lee la conversación con el bot</b> antes de escribir: el cliente ya contó su meta y su objeción, y se molesta si le vuelves a preguntar lo mismo.</li>'+
+    '<li>Tienes hasta <b>'+info.testMin+' minutos</b>, pero puedes <b>pausar</b> o <b>finalizar</b> cuando quieras.</li>'+
+    '<li>Para cerrar una venta, genera el link de pago con el botón <b>Precios y link de pago</b>. La venta cuenta cuando el cliente confirma que pagó.</li>'+
+    '<li>Vendes Expert, Duo y Groups de hasta 5 personas. Si el cliente ya es estudiante o es una empresa de más de 5 personas, explícale qué sigue y usa <b>Transferir</b> (Soporte o SMB).</li>'+
+    '<li>Al terminar verás tu feedback con lo que hiciste bien y lo que puedes mejorar.</li></ul>'+
+    '<p id="msg" class="err" role="alert"></p><div class="row" style="margin-top:18px"><button class="btn accent" id="go">Comenzar práctica</button><a class="btn" href="/asesor.html?k='+encodeURIComponent(pk)+'">Ver mis prácticas</a></div>');
+  $('#go').onclick = async () => {
+    const btn=$('#go'); btn.disabled=true; btn.textContent='Preparando la práctica…';
+    try{ S.ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+    try{ const r = await api('/api/practice', { k:pk, action:'start' }); startTest(r); }
+    catch(e){ btn.disabled=false; btn.textContent='Comenzar práctica'; $('#msg').textContent='No se pudo iniciar la práctica. Intenta de nuevo.'; }
+  };
+}
+async function init(){
+  if(PRAC) return initPractice();
+  if(!code){ shell(BRAND+'<h1>Necesitas un link de invitación</h1><p>Pide a la persona que te aplica la prueba el link con tu código personal.</p>'); return; }
+  let info;
+  try{ info = await api('/api/start?c='+encodeURIComponent(code)); }
+  catch(e){ shell(BRAND+'<h1>No pudimos cargar la prueba</h1><p class="err">'+esc(e.message2 || 'Intenta de nuevo en unos minutos.')+'</p>'); return; }
+  const msgs = {
+    no_existe:'Este link de invitación no es válido. Revisa que lo hayas copiado completo.',
+    vencida:'Esta invitación ya venció. Pide una nueva a la persona que te aplica la prueba.',
+    en_curso:'Esta invitación ya se usó para iniciar una prueba. Si se interrumpió, pide que la reactiven.',
+    terminada:'Ya completaste esta prueba. ¡Gracias! El equipo revisará tus resultados.'
+  };
+  const saved = loadLocal();
+  if(info.status === 'en_curso' && info.canResume && saved){ renderResume(info.name || '', saved); return; }
+  if(info.status !== 'pendiente'){ shell(BRAND+'<h1>Prueba no disponible</h1><p>'+esc(msgs[info.status] || 'Esta invitación no está disponible.')+'</p>'); return; }
+  renderIntro(info.name || '', info);
+}
+const LKEY = PRAC ? 'simPrac:'+pk : 'simPlatzi:'+code;
+function loadLocal(){ try{ const v=JSON.parse(localStorage.getItem(LKEY)||'null'); return v && v.sid && v.tk ? v : null; }catch(e){ return null; } }
+function saveLocal(v){ try{ localStorage.setItem(LKEY, JSON.stringify(v)); }catch(e){} }
+function clearLocal(){ try{ localStorage.removeItem(LKEY); }catch(e){} }
+function isPhone(){ return window.matchMedia('(pointer:coarse)').matches && Math.min(screen.width, screen.height) < 820; }
+function renderResume(name, saved){
+  shell(BRAND+'<h1>Tu '+(PRAC?'práctica':'prueba')+' se interrumpió</h1><p>Puedes continuar donde ibas. El tiempo siguió corriendo mientras estuviste desconectado.</p><p id="msg" class="err" role="alert"></p><div class="row" style="margin-top:18px"><button class="btn accent" id="go">Continuar mi prueba</button></div>');
+  $('#go').onclick = async () => {
+    const btn=$('#go'); btn.disabled=true; btn.textContent='Recuperando tu prueba…';
+    try{ S.ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+    try{ const r = PRAC ? await api('/api/practice', { k:pk, action:'resume', sid:saved.sid, tk:saved.tk }) : await api('/api/start', { c:code, resume:true, sid:saved.sid, tk:saved.tk }); startTest(r, r.snapshot || { startAt:r.startedAt }); }
+    catch(e){ if(PRAC){ clearLocal(); initPractice(); return; } btn.disabled=false; btn.textContent='Continuar mi prueba'; $('#msg').textContent='No pudimos recuperar tu prueba. Pide a la persona que te la aplica que reactive tu invitación.'; }
+  };
+}
+function renderIntro(name, info){
+  info = info || {};
+  if(isPhone()){ shell(BRAND+'<h1>Usa un computador</h1><p>Esta prueba debe hacerse desde un computador con buena conexión a internet. Abre este mismo link desde tu computador para comenzar.</p>'); return; }
+  shell(BRAND+'<h1>Hola'+(name ? ', '+esc(name.split(' ')[0]) : '')+'</h1>'+
+    '<p>Vas a atender clientes interesados en Platzi por un chat similar a WhatsApp. Tu objetivo es entender a cada cliente, resolver sus dudas y cerrar ventas.</p>'+
+    '<ul class="rules">'+
+    '<li>Tienes <b>'+(info.testMin||17)+' minutos</b>. El contador estará siempre visible.</li>'+
+    '<li>La prueba tiene 4 niveles. En cada nivel llegan más clientes al mismo tiempo y son más exigentes.</li>'+
+    (info.extraMin ? '<li>Si al final tienes conversaciones bien encaminadas, puedes recibir <b>'+info.extraMin+' minutos extra</b> para cerrarlas.</li>' : '')+
+    '<li>Los clientes pueden ser de distintos países. Cotiza en la moneda de cada uno con la tabla del botón <b>Precios y link de pago</b>.</li>'+
+    '<li>Una venta cuenta cuando el cliente confirma que pagó. Para eso, genera el link de pago con ese mismo botón y envíaselo.</li>'+
+    '<li>Puedes vender Expert, Duo y Groups de hasta 5 personas. Si el cliente ya es estudiante de Platzi, o es una empresa de más de 5 personas, explícale qué sigue y usa el botón <b>Transferir</b> (a Soporte o a SMB).</li>'+
+    '<li>Si un cliente espera demasiado, se molesta y pierde interés. Algunos clientes saludan y no responden, y otros vuelven a escribir más tarde.</li>'+
+    '<li>Escribe tus propias respuestas. El sistema registra el texto pegado y los cambios de pestaña.</li>'+
+    '<li>Usa un computador y no recargues ni cierres la ventana hasta ver el mensaje final. Si se cae tu internet, vuelve a abrir el mismo link para continuar.</li></ul>'+
+    '<label class="check"><input type="checkbox" id="ok"> <span>Autorizo el tratamiento de mis datos y de mis respuestas con fines de evaluación en este proceso de selección, conforme a la Ley 1581 de 2012.</span></label>'+
+    '<p id="msg" class="err" role="alert"></p>'+
+    '<div class="row" style="margin-top:18px"><button class="btn accent" id="go">Comenzar prueba</button></div>');
+  $('#go').onclick = async () => {
+    if(!$('#ok').checked) return $('#msg').textContent='Debes aceptar la autorización para continuar.';
+    const btn=$('#go'); btn.disabled=true; btn.textContent='Preparando la prueba…'; $('#msg').textContent='';
+    try{ S.ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+    try{ const r = await api('/api/start', { c:code, consent:true }); startTest(r); }
+    catch(e){ btn.disabled=false; btn.textContent='Comenzar prueba'; $('#msg').textContent = e.message2 || (e.code==='invite_en_curso' ? 'Esta invitación ya se usó.' : 'No se pudo iniciar la prueba. Intenta de nuevo.'); }
+  };
+}
+
+/* ============ MOTOR ============ */
+function startTest(r, snap){
+  const now = Date.now();
+  saveLocal({ sid:r.sid, tk:r.tk });
+  const T = S.test = { sid:r.sid, tk:r.tk, name:r.name, l4:r.l4, cfg:r.config, startAt:now, endAt:r.config.testSec*1000,
+    level:0, levelReached:1, active:null, ended:false, away:[], awayStart:null, lastReturn:null, errors:[], iv:null,
+    extra:{ checked:false, result:null, decided:false, granted:false },
+    clients: r.clients.map(c => Object.assign({}, c, { levelStart:null, arrivedAt:null, endedAt:null, status:'pendiente', plan:null, msgs:[],
+      ghostState: c.ghost ? 'silent' : null, ghostPushes:0, thinkAt:null, reactivated:false, reactAt:null, reactPending:false, inL4: c.level===4,
+      annoyed:false, annoyedAt:null, extra:false, skip:false, patience: r.config.levels[c.level-1].patienceSec*1000 })) };
+  T.clients.forEach(c => { RT[c.id] = { busy:false, pending:false, debounce:null, typing:false, waitingSince:null, nudged:false, draft:'', tel:{ k:0, first:null, pasted:false, pc:0 }, error:null, unread:0, answeredUpTo:0 }; });
+  if(snap) restoreSnapshot(T, snap);
+  renderTestShell();
+  if(snap && snap.level){
+    renderLevels();
+    if(T.extra.granted){ $('.tbar').classList.add('extra'); const bn=$('#banner'); bn.hidden=false; bn.textContent='Tiempo extra: cierra las conversaciones marcadas.'; }
+    T.clients.forEach(c => { if((c.status==='abierta'||c.status==='pensando') && !(c.ghost && c.ghostState==='silent')){ const last=c.msgs.filter(m=>m.f!=='s').pop(); if(last && last.f==='v') scheduleReply(c); } });
+    toast(PRAC ? 'Práctica recuperada' : 'Prueba recuperada');
+    if(T.paused) showPause();
+  } else startLevel(1, true);
+  T.cp = setInterval(checkpoint, 10000);
+  document.addEventListener('visibilitychange', onVis);
+  window.addEventListener('blur', onBlur); window.addEventListener('focus', onFocus);
+  window.addEventListener('beforeunload', onUnload);
+  window.addEventListener('pagehide', cpBeacon);
+  T.iv = setInterval(tick, 400);
+  tick();
+}
+function onUnload(e){ if(S.test && !S.test.ended){ e.preventDefault(); e.returnValue=''; } }
+function onBlur(){ const T=S.test; if(T && !T.ended && !T.paused && T.awayStart==null) T.awayStart=Date.now(); }
+function onFocus(){ const T=S.test; if(T && !T.ended && T.awayStart!=null){ const now=Date.now(); T.away.push({ from:T.awayStart-T.startAt, to:now-T.startAt }); T.awayStart=null; T.lastReturn=now; } }
+function onVis(){ if(document.hidden) onBlur(); else onFocus(); }
+
+function setupLevel4(T){
+  const now = Date.now();
+  const pool = shuffle(T.clients.filter(c => c.status==='pensando' && !c.annoyed)).concat(shuffle(T.clients.filter(c => c.status==='pensando' && c.annoyed)));
+  const back = pool.slice(0, T.cfg.maxReact==null ? 2 : T.cfg.maxReact);
+  back.forEach((c,k) => { c.reactPending=true; c.reactAt = now + (k===0 ? rand(30000,50000) : rand(80000,110000)); c.inL4=true; });
+}
+function startLevel(n, first){
+  const T=S.test; T.level=n; T.levelReached=Math.max(T.levelReached,n);
+  if(n===4) setupLevel4(T);
+  const now=Date.now();
+  T.clients.filter(c=>c.level===n && c.levelStart==null).forEach(c => c.levelStart = now);
+  renderLevels();
+  if(!first) toast('Nivel '+n);
+}
+function reactivate(c){
+  const T=S.test; c.reactPending=false;
+  if(c.status!=='pensando') return;
+  const now=Date.now();
+  c.reactivated=true; c.status='abierta'; c.patience=T.cfg.levels[3].patienceSec*1000;
+  c.msgs.push({ f:'s', t:now-T.startAt, x:'El cliente volvió a escribir' });
+  RT[c.id].nudged=false; RT[c.id].waitingSince=null;
+  pushClient(c, pick(REACT_OPEN));
+  if(T.active===c.id) renderChat(true);
+}
+function isResolved(c){
+  if(c.skip) return true;
+  if(c.reactPending) return false;
+  if(c.status==='pendiente') return false;
+  if(DONE.has(c.status) || c.status==='pensando' || c.status==='postventa') return true;
+  if(c.ghost && c.ghostState==='silent') return true;
+  if(c.annoyed && c.status==='abierta'){ const last=c.msgs.filter(m=>m.f!=='s').pop(); if(last && last.f==='c') return true; }
+  return false;
+}
+function openConvsForExtra(){
+  return S.test.clients.filter(c => (OPEN(c.status) || c.status==='pensando') && !(c.ghost && c.ghostState==='silent') && c.msgs.some(m=>m.f==='v'));
+}
+function activeCount(){ return S.test.clients.filter(c => OPEN(c.status) && !(c.ghost && c.ghostState==='silent')).length; }
+async function checkExtra(){
+  const T=S.test, convs=openConvsForExtra();
+  if(!convs.length){ T.extra.result=[]; return; }
+  try{ const r = await api('/api/extra', { sid:T.sid, tk:T.tk, convs: convs.map(c => ({ id:c.id, annoyed:c.annoyed, msgs:c.msgs })) }); T.extra.result = r.elegibles || []; }
+  catch(e){ T.extra.result = []; T.errors.push({ c:'extra', code:e.code, t:Date.now()-T.startAt }); }
+}
+function decideExtra(ids){
+  const T=S.test; T.extra.decided=true;
+  const ok = ids.filter(id => { const c=T.clients.find(x=>x.id===id); return c && (OPEN(c.status) || c.status==='pensando'); });
+  if(!ok.length) return;
+  T.extra.granted=true; T.endAt=(Date.now()-T.startAt)+T.cfg.extraSec*1000;
+  T.clients.forEach(c => {
+    c.reactPending=false;
+    if(c.status==='pendiente'){ c.skip=true; return; }
+    if(ok.includes(c.id)){ c.extra=true; return; }
+    if(c.status==='comprando') finish(c, buyEnd(c));
+    else if(c.status==='abierta' || c.status==='pensando') finish(c, 'cerrada_tiempo');
+  });
+  $('.tbar').classList.add('extra');
+  const bn=$('#banner'); bn.hidden=false; bn.textContent='Tiempo extra: tienes '+Math.round(T.cfg.extraSec/60)+' minuto'+(T.cfg.extraSec===60?'':'s')+' para cerrar las conversaciones marcadas.';
+  toast('Tiempo extra +'+Math.round(T.cfg.extraSec/60)+' min');
+  renderList(); renderChat(true);
+}
+function tick(){
+  const T=S.test; if(!T || T.ended || T.paused) return;
+  const now=Date.now(), el=now-T.startAt, cfg=T.cfg;
+  if(!T.extra.granted){
+    const maxSim = cfg.maxSim || 99;
+    for(const c of T.clients){
+      if(c.status==='pendiente' && !c.skip && c.levelStart!=null && now>=c.levelStart+c.offset && activeCount() < maxSim) arrive(c);
+      if(c.reactPending && now>=c.reactAt && activeCount() < maxSim) reactivate(c);
+    }
+  }
+  for(const c of T.clients){
+    if(!OPEN(c.status)) continue;
+    if(c.ghost && c.ghostState==='silent') continue;
+    const r=RT[c.id];
+    if(r.busy || r.typing || r.error || r.waitingSince==null || c.annoyed) continue;
+    const w=now-r.waitingSince;
+    if(!r.nudged && w>c.patience*0.6){ r.nudged=true; pushClient(c, pick(NUDGES)); }
+    if(w>c.patience){ c.annoyed=true; c.annoyedAt=el; pushClient(c, pick(ANNOY)); }
+  }
+  // Tiempo extra por buena gestión
+  if(!T.extra.checked && cfg.extraSec>0 && el >= cfg.extraCheckAtSec*1000){ T.extra.checked=true; checkExtra(); }
+  if(!T.extra.decided && T.extra.result && el >= cfg.extraDecideAtSec*1000) decideExtra(T.extra.result);
+  if(!T.extra.decided && el >= cfg.testSec*1000){ T.extra.decided=true; }
+  if(el >= T.endAt){ endTest(T.extra.granted ? 'tiempo_extra' : 'tiempo'); return; }
+  if(T.extra.granted){
+    if(T.clients.filter(c=>c.extra).every(c=>DONE.has(c.status))){ endTest('completo'); return; }
+  } else {
+    const L=cfg.levels[T.level-1];
+    const lv=T.clients.filter(c => c.level===T.level || (T.level===4 && c.inL4));
+    const allDone = lv.length>0 && lv.every(isResolved);
+    if(allDone || el >= L.endSec*1000){
+      if(T.level < cfg.levels.length) startLevel(T.level+1);
+    }
+    // La prueba solo termina antes de tiempo si todas las conversaciones quedaron cerradas de verdad
+    if(T.level===cfg.levels.length && T.clients.every(c => c.skip || DONE.has(c.status))){ endTest('completo'); return; }
+  }
+  const ck=$('#clock'); if(ck){ const rem=T.endAt-el; ck.textContent=(T.extra.granted?'Extra ':'')+mmss(rem); ck.classList.toggle('low', !T.extra.granted && rem<60000); ck.classList.toggle('extra', T.extra.granted); }
+}
+function arrive(c){
+  const T=S.test; c.status='abierta'; c.arrivedAt=Date.now()-T.startAt;
+  const auto = !T.active;
+  if(auto) T.active=c.id;
+  if(c.preMsgs && c.preMsgs.length){
+    const t=Date.now()-T.startAt;
+    c.preMsgs.forEach(m => c.msgs.push({ f:m.f, t, x:m.x }));
+    RT[c.id].waitingSince=Date.now()+60000; // 1 minuto extra para leer la conversación con el bot
+    if(T.active!==c.id){ RT[c.id].unread++; }
+    beep(); renderList(); if(T.active===c.id) renderMsgs(); updateTitle(); cpSoon();
+  } else pushClient(c, c.opener);
+  if(auto){ RT[c.id].unread=0; renderChat(true); renderList(); updateTitle(); }
+}
+function pushClient(c, text){
+  const T=S.test, r=RT[c.id], now=Date.now();
+  c.msgs.push({ f:'c', t:now-T.startAt, x:text });
+  if(r.waitingSince==null) r.waitingSince=now;
+  const wa=$('#wa');
+  const viewing = T.active===c.id && !document.hidden && (!isMobile() || (wa && wa.classList.contains('show-chat')));
+  if(!viewing){ r.unread++; beep(); }
+  renderList(); if(T.active===c.id) renderMsgs();
+  updateTitle(); cpSoon();
+}
+function finish(c, status, plan){
+  const T=S.test, r=RT[c.id];
+  c.status=status; c.endedAt=Date.now()-T.startAt; c.plan=plan||null;
+  clearTimeout(r.debounce); r.busy=false; r.typing=false; r.error=null;
+  renderList(); if(T.active===c.id) renderChat(true);
+}
+function send(c){
+  const T=S.test, r=RT[c.id], ta=$('#ta');
+  const text = ta.value.replace(/\s+$/,'');
+  if(!text.trim() || DONE.has(c.status) || T.ended) return;
+  const now=Date.now(), tel=r.tel;
+  const msg = { f:'v', t:now-T.startAt, x:text.slice(0,2000), k:tel.k, ty:tel.first ? now-tel.first : 0, p:tel.pasted, pc:tel.pc, aw: T.lastReturn && now-T.lastReturn<60000 ? now-T.lastReturn : null };
+  const last = c.msgs[c.msgs.length-1];
+  if(last && last.f==='v' && msg.t-last.t >= T.cfg.ghostPushGapSec*1000) msg.push = true;
+  c.msgs.push(msg);
+  r.tel={ k:0, first:null, pasted:false, pc:0 }; r.draft=''; r.waitingSince=null; r.nudged=false;
+  ta.value=''; autosize(ta);
+  renderMsgs(); renderList(); cpSoon();
+  if(c.ghost && c.ghostState==='silent'){
+    if(msg.push) c.ghostPushes++;
+    if(c.ghostPushes >= c.ghostNeed){ c.ghostState='engaged'; scheduleReply(c); }
+    return;
+  }
+  scheduleReply(c);
+}
+function transferConv(c, dest){
+  const T=S.test;
+  if(!confirm('¿Transferir la conversación con '+c.name.split(' ')[0]+' a '+DEST[dest]+'? Asegúrate de haberle explicado qué sigue. La conversación se cerrará.')) return;
+  c.transfer=dest;
+  c.msgs.push({ f:'s', t:Date.now()-T.startAt, x:'Conversación transferida a '+DEST[dest] });
+  finish(c, 'transferido');
+  cpSoon();
+}
+function scheduleReply(c){
+  const r=RT[c.id]; clearTimeout(r.debounce);
+  const rd=(S.test.cfg.replyDelaySec||[2.5,4]);
+  r.debounce=setTimeout(() => { r.debounce=null; runReply(c); }, rand(rd[0]*1000, rd[1]*1000));
+}
+async function runReply(c){
+  const T=S.test, r=RT[c.id];
+  if(T.ended || DONE.has(c.status)) return;
+  if(c.ghost && c.ghostState==='silent') return;
+  if(r.busy){ r.pending=true; return; }
+  if(!c.msgs.slice(r.answeredUpTo).some(m=>m.f==='v')) return;
+  r.busy=true; r.pending=false; r.error=null;
+  const snap=c.msgs.length; r.answeredUpTo=snap;
+  setTyping(c,true);
+  let res;
+  try{
+    res = await api('/api/reply', { sid:T.sid, tk:T.tk, cid:c.id, msgs:c.msgs.map(m=>({ f:m.f, t:m.t, x:m.x })),
+      st:{ annoyed:c.annoyed, reactivated:c.reactivated, ghostEngaged:c.ghostState==='engaged', thinking:c.status==='pensando', buying:c.status==='comprando', postSale:c.status==='postventa' } });
+  }catch(e){
+    r.busy=false; setTyping(c,false);
+    if(T.ended || DONE.has(c.status)) return;
+    r.answeredUpTo=0; r.error=e.code || 'error';
+    T.errors.push({ c:c.id, code:r.error, t:Date.now()-T.startAt });
+    if(T.active===c.id) renderMsgs();
+    return;
+  }
+  while(T.paused && !T.ended) await sleep(400);
+  if(T.ended || DONE.has(c.status)){ r.busy=false; return; }
+  for(const m of (res.mensajes || ['ok'])){
+    const mpc = T.cfg.typingMsPerChar==null ? 30 : T.cfg.typingMsPerChar;
+    await sleep(Math.min(Math.max(3000, mpc*120), 600 + String(m).length*mpc));
+    if(T.ended || DONE.has(c.status)){ r.busy=false; return; }
+    pushClient(c, m);
+  }
+  setTyping(c,false); r.busy=false;
+  const est=res.estado;
+  if(est==='pago' && c.status!=='postventa'){
+    c.status='postventa'; c.plan=res.plan||c.plan; c.soldAt=Date.now()-T.startAt; r.waitingSince=null;
+    renderList(); if(T.active===c.id){ renderHead(); renderMsgs(); }
+    toast('¡Venta! '+c.name.split(' ')[0]+' pagó');
+    if(r.pending || c.msgs.slice(snap).some(m=>m.f==='v')) scheduleReply(c);
+    return;
+  }
+  if(c.status==='postventa'){ r.waitingSince=null; if(r.pending || c.msgs.slice(snap).some(m=>m.f==='v')) scheduleReply(c); return; }
+  if(est==='no_compro'){ finish(c, est, res.plan); return; }
+  if(est==='compro'){ if(c.status!=='comprando'){ c.status='comprando'; c.buyingAt=Date.now()-T.startAt; renderList(); } }
+  else if(est==='lo_pensare' && c.status!=='comprando'){ if(c.status!=='pensando'){ c.status='pensando'; if(c.thinkAt==null) c.thinkAt=Date.now()-T.startAt; } r.waitingSince=null; renderList(); }
+  else if(c.status==='pensando' && est!=='compro') c.status='abierta';
+  if(r.pending || c.msgs.slice(snap).some(m=>m.f==='v')) scheduleReply(c);
+}
+function setTyping(c,on){
+  RT[c.id].typing=on;
+  if(S.test.active===c.id){ renderMsgs(); renderHead(); }
+  renderList();
+}
+
+/* ============ PAUSA (práctica) ============ */
+function pauseTest(){
+  const T=S.test; if(!T || T.ended || T.paused) return;
+  T.paused=true; T.pausedAt=Date.now();
+  T.clients.forEach(c => { const r=RT[c.id]; if(r.debounce){ clearTimeout(r.debounce); r.debounce=null; r.resched=true; } });
+  showPause(); checkpoint();
+}
+function resumeTest(){
+  const T=S.test; if(!T || !T.paused) return;
+  const d=Date.now()-T.pausedAt; T.paused=false; T.pausedAt=null;
+  T.startAt+=d; T.pauses=(T.pauses||0)+1; T.pausedMs=(T.pausedMs||0)+d; if(T.lastReturn) T.lastReturn+=d;
+  T.clients.forEach(c => { if(c.levelStart!=null) c.levelStart+=d; if(c.reactAt) c.reactAt+=d; const r=RT[c.id]; if(r.waitingSince!=null) r.waitingSince+=d; if(r.resched){ r.resched=false; scheduleReply(c); } });
+  const o=$('#pauseov'); if(o) o.remove();
+  cpSoon();
+}
+function showPause(){
+  if($('#pauseov')) return;
+  const o=document.createElement('div'); o.id='pauseov'; o.setAttribute('role','dialog'); o.setAttribute('aria-label','Práctica en pausa');
+  o.style.cssText='position:fixed;inset:0;z-index:30;background:rgba(10,18,34,.82);display:grid;place-items:center;padding:16px';
+  o.innerHTML='<div class="card" style="max-width:440px;text-align:center"><h1>Práctica en pausa</h1><p>El tiempo y los clientes están detenidos. Continúa cuando estés listo.</p><div class="row" style="justify-content:center;margin-top:16px"><button class="btn accent" id="rz">Continuar</button><button class="btn" id="fz2">Finalizar práctica</button></div></div>';
+  document.body.appendChild(o);
+  $('#rz').onclick = resumeTest; $('#rz').focus();
+  $('#fz2').onclick = () => { const T=S.test; const d=Date.now()-T.pausedAt; T.paused=false; T.startAt+=d; T.pausedMs=(T.pausedMs||0)+d; T.pauses=(T.pauses||0)+1; o.remove(); endTest('finalizada'); };
+}
+
+/* ============ RECUPERACIÓN ============ */
+const KEEP = ['soldAt','transfer','buyingAt','levelStart','arrivedAt','endedAt','status','plan','msgs','ghostState','ghostPushes','thinkAt','reactivated','reactAt','reactPending','inL4','annoyed','annoyedAt','extra','skip','patience'];
+function snapshotOf(T){
+  const rt = {}; T.clients.forEach(c => { const r=RT[c.id]; rt[c.id] = { waitingSince:r.waitingSince, nudged:r.nudged, unread:r.unread }; });
+  return { paused:!!T.paused, pausedAt:T.pausedAt||null, pauses:T.pauses||0, pausedMs:T.pausedMs||0, startAt:T.startAt, endAt:T.endAt, level:T.level, levelReached:T.levelReached, active:T.active, away:T.away, errors:T.errors.slice(-40),
+    extra:T.extra, clients:T.clients.map(c => { const o={ id:c.id }; KEEP.forEach(k => o[k]=c[k]); return o; }), rt, savedAt:Date.now() };
+}
+function restoreSnapshot(T, snap){
+  if(snap.startAt) T.startAt = snap.startAt;
+  if(!snap.level) return;
+  T.endAt = snap.endAt || T.endAt; T.level = snap.level; T.levelReached = snap.levelReached || snap.level; T.active = snap.active || null;
+  T.away = snap.away || []; T.errors = snap.errors || []; T.extra = Object.assign(T.extra, snap.extra || {});
+  if(T.extra.checked && !T.extra.result) T.extra.result = [];
+  T.pauses = snap.pauses || 0; T.pausedMs = snap.pausedMs || 0;
+  if(snap.paused && snap.pausedAt){ T.paused = true; T.pausedAt = snap.pausedAt; }
+  (snap.clients || []).forEach(sc => { const c = T.clients.find(x => x.id===sc.id); if(c) KEEP.forEach(k => { if(sc[k] !== undefined) c[k] = sc[k]; }); });
+  Object.keys(snap.rt || {}).forEach(id => { if(RT[id]) Object.assign(RT[id], snap.rt[id]); });
+  T.clients.forEach(c => { if(c.msgs && c.msgs.length) RT[c.id].answeredUpTo = 0; });
+}
+function cpSoon(){ const T=S.test; if(!T || T.ended) return; clearTimeout(T.cpT); T.cpT=setTimeout(checkpoint, 1200); }
+function cpBeacon(){ const T=S.test; if(!T || T.ended || !navigator.sendBeacon) return; try{ navigator.sendBeacon('/api/checkpoint', JSON.stringify({ sid:T.sid, tk:T.tk, snapshot:snapshotOf(T) })); }catch(e){} }
+async function checkpoint(){
+  const T=S.test; if(!T || T.ended) return;
+  try{ await api('/api/checkpoint', { sid:T.sid, tk:T.tk, snapshot:snapshotOf(T) }); }catch(e){}
+}
+
+/* ============ FIN ============ */
+async function endTest(reason){
+  const T=S.test; if(!T || T.ended) return; T.ended=true;
+  clearInterval(T.iv); clearInterval(T.cp); onFocus();
+  const now=Date.now();
+  T.clients.forEach(c => { clearTimeout(RT[c.id].debounce); c.reactPending=false;
+    if(c.status==='pensando'){ c.status='lo_pensare'; c.endedAt=now-T.startAt; }
+    else if(c.status==='postventa'){ c.status='compro'; c.endedAt=c.soldAt!=null ? c.soldAt : now-T.startAt; }
+    else if(c.status==='comprando'){ c.status=buyEnd(c); c.endedAt=now-T.startAt; }
+    else if(c.status==='abierta'){ c.status = c.ghost && c.ghostState==='silent' ? 'sin_respuesta' : 'sin_cerrar'; c.endedAt=now-T.startAt; } });
+  document.removeEventListener('visibilitychange', onVis); window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus);
+  const data = { reason, levelReached:T.levelReached, extraGranted:T.extra.granted, away:T.away, errors:T.errors, pauses:T.pauses||0, pausedMs:T.pausedMs||0,
+    conversations: T.clients.map(c => ({ id:c.id, status:c.status, plan:c.plan, arrivedAt:c.arrivedAt, endedAt:c.endedAt, msgs:c.msgs,
+      ghostState:c.ghostState, ghostPushes:c.ghostPushes, thinkAt:c.thinkAt, reactivated:c.reactivated, annoyed:c.annoyed, annoyedAt:c.annoyedAt, extra:c.extra, transfer:c.transfer||null })) };
+  await saveResults(data);
+}
+async function saveResults(data){
+  const T=S.test, first=(T.name||'').split(' ')[0];
+  shell(BRAND+'<h1>Prueba finalizada'+(first?'. Gracias, '+esc(first):'')+'.</h1><p>Guardando tus respuestas. No cierres esta ventana.</p>');
+  for(let i=0;i<3;i++){
+    try{
+      await api('/api/finish', { sid:T.sid, tk:T.tk, data });
+      window.removeEventListener('beforeunload', onUnload);
+      clearLocal();
+      if(PRAC) return practiceFeedback(data);
+      shell(BRAND+'<h1>Prueba finalizada'+(first?'. Gracias, '+esc(first):'')+'.</h1><p>Tus respuestas quedaron guardadas. El equipo revisará tus resultados y te contactará.</p><p class="muted">Ya puedes cerrar esta ventana.</p>');
+      document.title='Prueba finalizada';
+      return;
+    }catch(e){ await sleep(2000); }
+  }
+  shell(BRAND+'<h1>No pudimos guardar tus respuestas</h1><p class="err">Revisa tu conexión a internet y presiona el botón. No cierres esta ventana.</p><div class="row"><button class="btn primary" id="rt">Reintentar guardado</button></div>');
+  $('#rt').onclick = () => saveResults(data);
+}
+
+async function practiceFeedback(data){
+  const T=S.test;
+  const convs = data.conversations.filter(c => c.msgs.some(m => m.f==='v'));
+  const step = t => shell(BRAND+'<h1>¡Práctica terminada!</h1><p>Estamos preparando tu feedback. Toma uno o dos minutos; no cierres esta ventana.</p><p class="muted">'+esc(t)+'</p>');
+  try{
+    let i=0;
+    for(const c of convs){ i++; step('Analizando conversación '+i+' de '+convs.length+'…'); await api('/api/evaluate', { k:pk, sid:T.sid, part:'conv', cid:c.id }); }
+    step('Preparando tus recomendaciones…');
+    await api('/api/evaluate', { k:pk, sid:T.sid, part:'summary' });
+  }catch(e){}
+  location.href = '/asesor.html?k='+encodeURIComponent(pk)+'&r='+encodeURIComponent(T.sid);
+}
+
+/* ============ INTERFAZ ============ */
+function renderTestShell(){
+  const T=S.test;
+  app.innerHTML = '<div class="test"><header class="tbar"><span class="who">'+esc(T.name||'')+'</span>'+
+    '<div class="levels" id="lv" aria-live="polite"></div><div class="clock" id="clock" aria-label="Tiempo restante">'+mmss(T.endAt)+'</div>'+
+    '<button class="btn" id="pb">Precios y link de pago</button>'+(PRAC?'<button class="btn" id="pz">Pausar</button><button class="btn" id="fz">Finalizar</button>':'')+'</header><div class="banner" id="banner" hidden role="status"></div>'+
+    '<div class="wa" id="wa"><aside class="list" id="list" aria-label="Conversaciones"></aside><section class="chat none" id="chat"></section></div></div>';
+  $('#pb').onclick = openPrices;
+  if(PRAC){ $('#pz').onclick = pauseTest; $('#fz').onclick = () => { if(confirm('¿Finalizar la práctica ahora? Verás tu feedback con lo que alcanzaste a hacer.')) endTest('finalizada'); }; }
+  renderList(); renderChat(true);
+}
+function renderLevels(){
+  const T=S.test, el=$('#lv'); if(!el) return;
+  el.innerHTML = T.cfg.levels.map(L => '<span class="seg '+(L.n<T.level?'done':L.n===T.level?'on':'')+'"></span>').join('')+'<span class="lvtxt">Nivel '+T.level+' de '+T.cfg.levels.length+'</span>';
+}
+function renderList(){
+  const T=S.test, el=$('#list'); if(!el) return;
+  const pri = c => (c.extra && !DONE.has(c.status)) ? 1 : 0;
+  const cs=T.clients.filter(c=>c.status!=='pendiente').sort((a,b)=>(pri(b)-pri(a)) || ((b.msgs.length?b.msgs[b.msgs.length-1].t:0)-(a.msgs.length?a.msgs[a.msgs.length-1].t:0)));
+  if(!cs.length){ el.innerHTML='<p class="empty">Esperando al primer cliente…</p>'; return; }
+  el.innerHTML = cs.map(c => {
+    const r=RT[c.id], last=c.msgs.filter(m=>m.f!=='s').pop();
+    const pv = r.typing ? '<span style="color:var(--accent-deep);font-weight:600">escribiendo…</span>' : esc((last.f==='v'?'Tú: ':last.f==='b'?'Bot: ':'')+last.x);
+    const tm = new Date(T.startAt+last.t).toLocaleTimeString('es-CO',{ hour:'2-digit', minute:'2-digit' });
+    return '<button class="item '+(T.active===c.id?'active ':'')+(DONE.has(c.status)?'done':'')+'" data-id="'+c.id+'">'+
+      '<span class="av" style="background:'+c.color+'">'+esc(initials(c.name))+'</span><span class="meta"><span class="top"><span class="nm">'+esc(c.name)+' '+c.flag+(c.extra&&!DONE.has(c.status)?'<span class="xtag">extra</span>':'')+(c.status==='postventa'?'<span class="xtag" style="background:var(--accent);color:#13213C">pagó</span>':'')+'</span><span class="tm">'+tm+'</span></span>'+
+      '<span class="top"><span class="pv">'+pv+'</span>'+(r.unread?'<span class="badge">'+r.unread+'</span>':'')+'</span></span></button>';
+  }).join('');
+  el.querySelectorAll('.item').forEach(b => b.onclick = () => openChat(b.dataset.id));
+}
+function openChat(id){
+  const T=S.test; T.active=id; RT[id].unread=0;
+  $('#wa').classList.add('show-chat');
+  renderChat(true); renderList(); updateTitle();
+}
+function renderChat(){
+  const T=S.test, el=$('#chat'); if(!el) return;
+  const c=T.clients.find(x=>x.id===T.active);
+  if(!c){ el.className='chat none'; el.innerHTML='<p>Cuando llegue un cliente, abre su conversación desde la lista.</p>'; return; }
+  el.className='chat';
+  el.innerHTML='<div class="chead" id="chead"></div><div class="msgs" id="msgs" role="log" aria-live="polite"></div><div id="foot"></div>';
+  renderHead(); renderMsgs(true);
+  const foot=$('#foot');
+  if(DONE.has(c.status)){ foot.innerHTML='<div class="closed">Conversación finalizada</div>'; return; }
+  foot.innerHTML='<div class="composer"><textarea id="ta" rows="1" placeholder="Escribe un mensaje" aria-label="Mensaje"></textarea>'+
+    '<button class="send" id="sb" aria-label="Enviar"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 20.5 21 12 3 3.5l.01 6.6L15 12 3.01 13.9z"/></svg></button></div>';
+  const ta=$('#ta'), r=RT[c.id];
+  ta.value=r.draft; autosize(ta);
+  ta.addEventListener('keydown', e => {
+    if(e.key==='Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); send(c); return; }
+    if(e.key.length===1 || e.key==='Backspace' || e.key==='Delete' || e.key==='Enter'){ r.tel.k++; if(!r.tel.first) r.tel.first=Date.now(); }
+  });
+  ta.addEventListener('paste', e => { const t=(e.clipboardData && e.clipboardData.getData('text')) || ''; r.tel.pasted=true; r.tel.pc+=t.length; if(!r.tel.first) r.tel.first=Date.now(); });
+  ta.addEventListener('drop', () => { r.tel.pasted=true; });
+  ta.addEventListener('input', () => { r.draft=ta.value; autosize(ta); if(r.debounce) scheduleReply(c); });
+  $('#sb').onclick = () => { send(c); ta.focus(); };
+  if(!isMobile()) ta.focus();
+}
+function renderHead(){
+  const T=S.test, el=$('#chead'); if(!el) return;
+  const c=T.clients.find(x=>x.id===T.active); if(!c) return;
+  const r=RT[c.id];
+  el.innerHTML='<button class="btn back" id="bk" aria-label="Volver a la lista" style="padding:6px 10px">‹</button><span class="av" style="background:'+c.color+'">'+esc(initials(c.name))+'</span>'+
+    '<div><div style="font-weight:650">'+esc(c.name)+' '+c.flag+(c.extra&&!DONE.has(c.status)?'<span class="xtag">extra</span>':'')+(c.status==='postventa'?'<span class="xtag" style="background:var(--accent);color:#13213C">pagó</span>':'')+'</div><div class="st '+(r.typing?'typing':'')+'">'+(r.typing?'escribiendo…':esc(c.country))+'</div></div>'+
+    (DONE.has(c.status) || c.status==='postventa' ? '' : '<span style="flex:1"></span><div style="position:relative"><button class="btn" id="trb" aria-haspopup="true" aria-expanded="false" style="padding:6px 12px">Transferir</button><div id="trm" hidden role="menu" style="position:absolute;right:0;top:110%;z-index:12;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.18)"><button class="btn" role="menuitem" data-dest="soporte" style="width:100%;text-align:left;border:0;margin-bottom:4px">A Soporte (ya es cliente)</button><button class="btn" role="menuitem" data-dest="smb" style="width:100%;text-align:left;border:0">A SMB (empresas, más de 5)</button></div></div>');
+  $('#bk').onclick = () => { $('#wa').classList.remove('show-chat'); };
+  const trb=$('#trb');
+  if(trb){
+    trb.onclick = () => { const m=$('#trm'); m.hidden=!m.hidden; trb.setAttribute('aria-expanded', String(!m.hidden)); };
+    el.querySelectorAll('[data-dest]').forEach(b => b.onclick = () => transferConv(c, b.dataset.dest));
+  }
+}
+function renderMsgs(forceBottom){
+  const T=S.test, el=$('#msgs'); if(!el) return;
+  const c=T.clients.find(x=>x.id===T.active); if(!c) return;
+  const r=RT[c.id];
+  const near = forceBottom || el.scrollHeight-el.scrollTop-el.clientHeight < 120;
+  let html = c.msgs.map(m => m.f==='s' ? '<div class="sys">'+esc(m.x)+'</div>' : m.f==='b' ? '<div class="b v bot"><span class="botl">Bot de Platzi</span>'+esc(m.x)+'</div>' : '<div class="b '+m.f+'">'+esc(m.x)+'<time>'+new Date(T.startAt+m.t).toLocaleTimeString('es-CO',{ hour:'2-digit', minute:'2-digit' })+'</time></div>').join('');
+  if(r.typing) html += '<div class="dots" aria-label="escribiendo"><i></i><i></i><i></i></div>';
+  if(r.error) html += '<div class="sys">'+(r.error==='rate_limited'?'El cliente no pudo responder por un límite de uso. Espera unos segundos.':'El cliente no pudo responder por un problema de conexión.')+'<button class="btn" id="rt">Reintentar</button></div>';
+  if(c.status==='cerrada_tiempo') html += '<div class="sys">Esta conversación se cerró al terminar el tiempo.</div>';
+  el.innerHTML = html;
+  const rb=$('#rt'); if(rb) rb.onclick = () => { r.error=null; renderMsgs(); runReply(c); };
+  if(near) el.scrollTop = el.scrollHeight;
+}
+function autosize(ta){ ta.style.height='auto'; ta.style.height=Math.min(150, ta.scrollHeight+2)+'px'; }
+function updateTitle(){ const n=S.test.clients.reduce((s,c)=>s+RT[c.id].unread,0); document.title=(n?'('+n+') ':'')+'Prueba de ventas'; }
+function beep(){
+  try{ const ac=S.ac; if(!ac) return; if(ac.state==='suspended') ac.resume();
+    const o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime;
+    o.frequency.value=880; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.07,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t+0.2);
+  }catch(e){}
+}
+function toast(txt){ const d=document.createElement('div'); d.className='toast'; d.textContent=txt; d.setAttribute('role','status'); document.body.appendChild(d); setTimeout(()=>d.remove(), 2200); }
+function openPrices(){
+  if($('#drawer')) return;
+  const T=S.test, P=T.cfg.prices, L=T.cfg.curLabel||{};
+  const active = T.clients.find(x=>x.id===T.active);
+  const rows = Object.keys(P).map(k => '<tr><td>'+esc(L[k]||k)+'</td>'+P[k].list.map(n=>'<td>'+n.toLocaleString('en-US')+'</td>').join('')+P[k].disc.map(n=>'<td>'+n.toLocaleString('en-US')+'</td>').join('')+'</tr>').join('');
+  const curOpts = '<option value="">Elige la moneda del cliente</option>' + Object.keys(P).map(k => '<option value="'+k+'">'+esc(L[k]||k)+'</option>').join('');
+  const d=document.createElement('div'); d.className='drawer'; d.id='drawer'; d.setAttribute('role','dialog'); d.setAttribute('aria-label','Precios y link de pago');
+  d.innerHTML='<header><b>Precios y link de pago</b><button class="btn" id="dc">Cerrar</button></header><div class="body">'+
+    '<h3 style="margin-top:0">Generar link de pago</h3>'+
+    '<div class="grid2" style="gap:10px"><div><label for="lp">Plan</label><select id="lp"><option value="expert">Expert (1 persona)</option><option value="duo">Duo (2 personas)</option><option value="groups">Groups (desde 4)</option></select></div>'+
+    '<div><label for="lc">Moneda</label><select id="lc">'+curOpts+'</select></div>'+
+    '<div><label for="lt">Precio</label><select id="lt"><option value="list">Precio de lista</option><option value="disc">Precio especial</option></select></div>'+
+    '<div><label for="lf">Forma de pago</label><select id="lf"><option value="contado">De contado con tarjeta</option><option value="4cuotas">4 cuotas sin intereses (con tarjeta)</option><option value="12msi">12 meses sin intereses (solo México)</option><option value="transferencia">Transferencia o PSE</option><option value="efectivo">Efectivo</option></select></div></div>'+
+    '<p id="lpv" class="note" style="margin-top:12px;word-break:break-all"></p>'+
+    '<div class="row"><button class="btn accent" id="lins">Insertar en el chat'+(active?' con '+esc(active.name.split(' ')[0]):'')+'</button><button class="btn" id="lcp">Copiar link</button></div>'+
+    '<h3>Tabla de precios</h3><div class="scroll-x"><table><thead><tr><th rowspan="2">Moneda</th><th colspan="3" style="text-align:center">Precio de lista</th><th colspan="3" style="text-align:center">Precio especial máximo</th></tr><tr><th>Expert</th><th>Duo</th><th>Groups</th><th>Expert</th><th>Duo</th><th>Groups</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<p class="small muted" style="margin-top:14px">Planes anuales: Expert para 1 persona, Duo para 2 y Groups desde 4. Precio especial máximo del 15%. Pago en 4 cuotas mensuales sin intereses con tarjeta de crédito o débito; en México, hasta 12 meses sin intereses. Ecuador, Panamá y El Salvador usan la fila USD; Estados Unidos usa su propia fila.</p></div>';
+  document.body.appendChild(d);
+  const link = () => { const plan=$('#lp').value, cur=$('#lc').value; if(!cur) return ''; const idx={expert:0,duo:1,groups:2}[plan]; const amt=P[cur][$('#lt').value][idx]; return location.origin+'/pago.html?p='+plan+'-'+cur.toLowerCase()+'-'+amt+'-'+$('#lf').value; };
+  const upd = () => { const plan=$('#lp').value, cur=$('#lc').value; $('#lins').disabled=!cur; $('#lcp').disabled=!cur;
+    if(!cur){ $('#lpv').innerHTML='Elige la moneda para ver el link.'; return; }
+    const idx={expert:0,duo:1,groups:2}[plan], amt=P[cur][$('#lt').value][idx];
+    $('#lpv').innerHTML='<b>'+esc($('#lp').selectedOptions[0].textContent)+'</b>, '+amt.toLocaleString('en-US')+' '+esc(cur==='USA'?'USD':cur)+', '+esc($('#lf').selectedOptions[0].textContent.toLowerCase())+'<br><span class="small">'+esc(link())+'</span>'; };
+  ['#lp','#lc','#lt','#lf'].forEach(id => $(id).onchange = upd); upd();
+  $('#lcp').onclick = async () => { try{ await navigator.clipboard.writeText(link()); $('#lcp').textContent='Copiado'; }catch(e){ prompt('Copia el link:', link()); } setTimeout(()=>{ const b=$('#lcp'); if(b) b.textContent='Copiar link'; },1500); };
+  $('#lins').onclick = () => { const ta=$('#ta'); if(!ta){ $('#lins').textContent='Abre una conversación primero'; return; } ta.value = (ta.value ? ta.value.replace(/\s*$/,' ') : '') + link(); const c=T.clients.find(x=>x.id===T.active); if(c) RT[c.id].draft=ta.value; autosize(ta); d.remove(); ta.focus(); };
+  $('#dc').onclick = () => d.remove();
+  d.addEventListener('keydown', e => { if(e.key==='Escape') d.remove(); });
+  $('#lp').focus();
+}
+window.addEventListener('resize', () => { const wa=$('#wa'); if(S.test && !S.test.ended && !isMobile() && wa) wa.classList.remove('show-chat'); });
+init();
+})();
+</script>
+</body>
+</html>
